@@ -162,7 +162,9 @@ async function saveGame(gameData) {
   }
 }
 
-async function deleteGame(id, title) {
+async function deleteGame(id) {
+  const game = games.find(g => g.id === id);
+  const title = game ? game.title : 'this game';
   if (!confirm(`Are you sure you want to delete "${title}"? This action cannot be undone.`)) {
     return;
   }
@@ -318,10 +320,10 @@ function createGameCardHTML(game) {
         
         <!-- Hover actions overlay -->
         <div class="game-card-actions-overlay">
-          <button class="action-circle-btn edit-btn" onclick="openEditGameModal('${game.id}')" title="Edit Game">
+          <button class="action-circle-btn edit-btn" data-action="edit" data-game-id="${game.id}" title="Edit Game">
             <i data-lucide="edit-3"></i>
           </button>
-          <button class="action-circle-btn delete-btn" onclick="deleteGame('${game.id}', '${game.title.replace(/'/g, "\\'")}')" title="Delete Game">
+          <button class="action-circle-btn delete-btn" data-action="delete" data-game-id="${game.id}" title="Delete Game">
             <i data-lucide="trash-2"></i>
           </button>
         </div>
@@ -355,7 +357,7 @@ function createGameCardHTML(game) {
             <span>Playtime: <span class="time-val" id="time-val-${game.id}">${formatHours(game.playtime)}</span></span>
           </div>
           <button class="game-play-btn ${isTrackingThis ? 'tracking' : ''}" 
-                  onclick="togglePlayTime('${game.id}', event)" 
+                  data-action="play" data-game-id="${game.id}"
                   title="${isTrackingThis ? 'Stop tracking session' : 'Start playing'}">
             <i data-lucide="${isTrackingThis ? 'loader' : 'play'}"></i>
           </button>
@@ -506,7 +508,7 @@ function updateStatsUI(stats) {
       sidebarPlatformsList.innerHTML = `<li class="text-dark" style="font-size: 12px; padding: 4px 8px;">None added yet</li>`;
     } else {
       sidebarPlatformsList.innerHTML = platformEntries.map(([plat, count]) => `
-        <li class="sidebar-list-item" onclick="filterByPlatformDirect('${plat}')">
+        <li class="sidebar-list-item" data-platform="${plat}">
           <span>${plat}</span>
           <span class="badge">${count}</span>
         </li>
@@ -710,7 +712,7 @@ function renderFilterTags() {
     filterTagsList.innerHTML = tags.map(tag => `
       <div class="filter-tag">
         <span>${tag.label}</span>
-        <button onclick="removeFilterTag('${tag.key}')"><i data-lucide="x" style="width: 12px; height: 12px;"></i></button>
+        <button data-filter-key="${tag.key}"><i data-lucide="x" style="width: 12px; height: 12px;"></i></button>
       </div>
     `).join('');
     if (window.lucide) window.lucide.createIcons();
@@ -719,10 +721,9 @@ function renderFilterTags() {
   }
 }
 
-window.removeFilterTag = function(key) {
+function removeFilterTag(key) {
   if (key === 'status') {
     activeFilters.status = 'All';
-    // Remove selected state on status cards
     document.querySelectorAll('.status-card').forEach(c => c.classList.remove('active-filter'));
   } else if (key === 'platform') {
     activeFilters.platform = 'All';
@@ -732,7 +733,7 @@ window.removeFilterTag = function(key) {
     filterFormat.value = 'All';
   }
   renderLibrary();
-};
+}
 
 // ----------------------------------------------------
 // EVENT LISTENERS HANDLER
@@ -824,12 +825,53 @@ function setupEventListeners() {
     renderLibrary();
   });
 
+  // Event delegation for filter tag remove buttons
+  filterTagsList.addEventListener('click', (e) => {
+    const tagBtn = e.target.closest('[data-filter-key]');
+    if (!tagBtn) return;
+    removeFilterTag(tagBtn.getAttribute('data-filter-key'));
+  });
+
+  // Event delegation for sidebar platform quick-filter
+  const sidebarPlatformsList = document.getElementById('sidebar-platforms');
+  if (sidebarPlatformsList) {
+    sidebarPlatformsList.addEventListener('click', (e) => {
+      const item = e.target.closest('[data-platform]');
+      if (!item) return;
+      filterByPlatformDirect(item.getAttribute('data-platform'));
+    });
+  }
+
   // Add Game Modal opening trigger
   document.getElementById('add-game-btn').addEventListener('click', () => {
     openAddGameModal();
   });
   emptyStateAddBtn.addEventListener('click', () => {
     openAddGameModal();
+  });
+
+  // Event delegation for dynamically rendered game card buttons
+  gamesGrid.addEventListener('click', (e) => {
+    const actionBtn = e.target.closest('[data-action]');
+    if (!actionBtn) return;
+
+    const action = actionBtn.getAttribute('data-action');
+    const gameId = actionBtn.getAttribute('data-game-id');
+    if (!gameId) return;
+
+    e.stopPropagation();
+
+    switch (action) {
+      case 'edit':
+        openEditGameModal(gameId);
+        break;
+      case 'delete':
+        deleteGame(gameId);
+        break;
+      case 'play':
+        togglePlayTime(gameId, e);
+        break;
+    }
   });
 
   // Modal Cancel triggers
@@ -1031,7 +1073,7 @@ function openAddGameModal() {
   openModal(gameModal);
 }
 
-window.openEditGameModal = function(id) {
+function openEditGameModal(id) {
   const game = games.find(g => g.id === id);
   if (!game) return;
 
@@ -1065,7 +1107,7 @@ window.openEditGameModal = function(id) {
   document.getElementById('game-notes').value = game.notes || '';
 
   openModal(gameModal);
-};
+}
 
 function setFormRatingStars(ratingVal) {
   gameRatingInput.value = ratingVal;

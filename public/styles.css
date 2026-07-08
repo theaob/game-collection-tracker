@@ -1211,6 +1211,10 @@ textarea.form-control {
   margin-top: 8px;
 }
 
+.mt-3 {
+  margin-top: 12px;
+}
+
 /* Stars Picker */
 .rating-stars-input {
   display: flex;

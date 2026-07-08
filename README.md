@@ -98,3 +98,27 @@ game-collection-tracker/
 - **Manual Backups**: You can download a backup at any time inside the app by clicking the **Settings** (gear) icon in the top right and clicking **Download JSON Backup**.
 - **Database Restoration**: To restore your database, open the **Settings** modal, drag and drop your exported JSON backup file, and confirm the overwrite.
 - **Portability**: Because the database is stored in a clean JSON format under `data/games.json`, you can simply copy this file to migrate your library to a new server.
+
+---
+
+## 🔮 Future Work & Roadmap
+
+Planned features and improvement areas for upcoming releases:
+
+### Near-Term
+- **Cover Art Auto-Fetch**: Integrate with IGDB or RAWG APIs to automatically pull cover images and metadata by game title.
+- **Wishlist Status**: Add a "Wishlist" status alongside Backlog/Playing/Completed/Abandoned to track games you plan to purchase.
+- **Tags & Custom Labels**: Allow user-defined tags (e.g., "couch co-op", "100% complete", "speedrun") for richer filtering.
+- **Genre Auto-Complete**: Pre-populated genre suggestions when adding/editing games.
+
+### Mid-Term
+- **Multi-User Support**: Optional authentication layer with per-user libraries for shared household servers.
+- **SQLite Backend**: Optional migration path from JSON to SQLite for users with very large collections (10,000+ games).
+- **Steam/GOG API Import**: One-click bulk import from Steam, GOG Galaxy, or PlayStation trophy lists.
+- **Mobile-First PWA**: Service worker support for offline access and "Add to Home Screen" on mobile devices.
+
+### Long-Term
+- **Achievement Tracking**: Log and display achievements/trophies per game.
+- **Friends & Social**: Share your collection or completion stats with friends via public profile links.
+- **Play History Timeline**: Visual timeline of your gaming sessions, showing what you played and when.
+- **Plugin System**: Extensible architecture for community-built integrations (e.g., HowLongToBeat estimates, price trackers).
