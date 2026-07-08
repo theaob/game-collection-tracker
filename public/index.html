@@ -320,7 +320,14 @@
           <div class="form-row">
             <div class="form-group col-12">
               <label for="game-title">Game Title *</label>
-              <input type="text" id="game-title" class="form-control" required placeholder="e.g. Elden Ring, Persona 5 Royal">
+              <div class="title-search-input-group">
+                <input type="text" id="game-title" class="form-control" required placeholder="e.g. Elden Ring, Persona 5 Royal">
+                <button type="button" class="btn btn-secondary" id="fetch-cover-btn" title="Search online metadata and cover art">
+                  <i data-lucide="search-code"></i>
+                  <span>Search Online</span>
+                </button>
+              </div>
+              <div class="cover-search-results" id="cover-search-results" style="display: none;"></div>
             </div>
           </div>
 

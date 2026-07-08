@@ -1713,3 +1713,101 @@ textarea.form-control {
     grid-template-columns: 1fr;
   }
 }
+
+/* Online Cover Search Group */
+.title-search-input-group {
+  display: flex;
+  gap: 8px;
+}
+.title-search-input-group input {
+  flex-grow: 1;
+}
+.title-search-input-group button {
+  white-space: nowrap;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Cover Search Results Dropdown */
+.cover-search-results {
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--border-radius-sm);
+  margin-top: 8px;
+  max-height: 250px;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(12px);
+  position: relative;
+  z-index: 100;
+}
+
+.cover-search-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.cover-search-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cover-search-item-img {
+  width: 42px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #111827;
+}
+
+.cover-search-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-grow: 1;
+  min-width: 0; /* Prevents text overflow */
+}
+
+.cover-search-item-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cover-search-item-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cover-search-loading, .cover-search-error {
+  padding: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.cover-search-loading i {
+  animation: rotate-loading 1.5s infinite linear;
+}
+

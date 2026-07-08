@@ -1006,6 +1006,117 @@ function setupEventListeners() {
       }
     }
   });
+
+  // Online Cover Art & Metadata Search handler
+  const fetchCoverBtn = document.getElementById('fetch-cover-btn');
+  const coverSearchResults = document.getElementById('cover-search-results');
+
+  if (fetchCoverBtn && coverSearchResults) {
+    fetchCoverBtn.addEventListener('click', async () => {
+      const titleVal = document.getElementById('game-title').value.trim();
+      if (!titleVal) {
+        showToast("Please enter a game title to search.", "info");
+        return;
+      }
+
+      // Display loading state
+      coverSearchResults.innerHTML = `
+        <div class="cover-search-loading">
+          <i data-lucide="loader"></i>
+          <span>Searching online database...</span>
+        </div>
+      `;
+      coverSearchResults.style.display = 'flex';
+      if (window.lucide) window.lucide.createIcons();
+
+      try {
+        const res = await fetch(`/api/search-cover?q=${encodeURIComponent(titleVal)}`);
+        
+        if (res.status === 503) {
+          const err = await res.json();
+          coverSearchResults.innerHTML = `
+            <div class="cover-search-error">
+              <i data-lucide="alert-circle" style="color: var(--color-abandoned); width: 18px; height: 18px;"></i>
+              <div style="text-align: left; max-width: 280px;">
+                <p style="font-weight: 700; margin-bottom: 2px;">Feature Not Configured</p>
+                <p style="font-size: 11px; color: var(--text-muted); line-height: 1.3;">${err.error}</p>
+              </div>
+            </div>
+          `;
+          if (window.lucide) window.lucide.createIcons();
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error("Failed to fetch games from RAWG proxy.");
+        }
+
+        const results = await res.json();
+        
+        if (results.length === 0) {
+          coverSearchResults.innerHTML = `
+            <div class="cover-search-loading">
+              <span>No matching games found.</span>
+            </div>
+          `;
+          return;
+        }
+
+        // Render search results
+        coverSearchResults.innerHTML = results.map((game, index) => {
+          const year = game.released ? new Date(game.released).getFullYear() : 'N/A';
+          return `
+            <div class="cover-search-item" data-index="${index}">
+              <img src="${game.coverUrl || 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2250%22><rect width=%2240%22 height=%2250%22 fill=%22%23222%22/></svg>'}" class="cover-search-item-img" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2250%22><rect width=%2240%22 height=%2250%22 fill=%22%23222%22/></svg>'">
+              <div class="cover-search-item-info">
+                <span class="cover-search-item-title">${game.name}</span>
+                <span class="cover-search-item-meta">${year} • ${game.genres || 'Genres N/A'}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Bind clicks on search items
+        coverSearchResults.querySelectorAll('.cover-search-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const index = parseInt(item.getAttribute('data-index'));
+            const game = results[index];
+
+            // Fill inputs with online metadata
+            document.getElementById('game-title').value = game.name;
+            document.getElementById('game-cover').value = game.coverUrl;
+            
+            if (game.released) {
+              document.getElementById('game-release').value = new Date(game.released).getFullYear();
+            }
+            if (game.genres) {
+              const mainGenre = game.genres.split(', ')[0];
+              document.getElementById('game-genre').value = mainGenre;
+            }
+
+            coverSearchResults.style.display = 'none';
+            showToast(`Applied metadata for "${game.name}"`, "success");
+          });
+        });
+
+      } catch (error) {
+        coverSearchResults.innerHTML = `
+          <div class="cover-search-error">
+            <i data-lucide="alert-triangle" style="color: var(--color-backlog); width: 18px; height: 18px;"></i>
+            <span>Error: ${error.message}</span>
+          </div>
+        `;
+        if (window.lucide) window.lucide.createIcons();
+      }
+    });
+
+    // Close search box on click outside
+    document.addEventListener('click', (e) => {
+      if (!coverSearchResults.contains(e.target) && e.target !== fetchCoverBtn && e.target !== document.getElementById('game-title')) {
+        coverSearchResults.style.display = 'none';
+      }
+    });
+  }
 }
 
 // ----------------------------------------------------
@@ -1069,6 +1180,7 @@ function openAddGameModal() {
   gameIdInput.value = '';
   customPlatformInput.style.display = 'none';
   customPlatformInput.removeAttribute('required');
+  document.getElementById('cover-search-results').style.display = 'none';
   setFormRatingStars(0);
   openModal(gameModal);
 }
@@ -1080,6 +1192,7 @@ function openEditGameModal(id) {
   modalTitle.textContent = "Edit Game Details";
   gameIdInput.value = game.id;
   document.getElementById('game-title').value = game.title;
+  document.getElementById('cover-search-results').style.display = 'none';
   
   // Set platform select option or trigger custom
   const options = Array.from(gamePlatformSelect.options).map(o => o.value);

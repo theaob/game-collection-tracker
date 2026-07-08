@@ -10,6 +10,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const RAWG_API_KEY = process.env.RAWG_API_KEY || '';
 
 // Database file setup
 const DATA_DIR = path.join(__dirname, 'data');
@@ -359,6 +360,52 @@ app.post('/api/import', (req, res) => {
   }
 });
 
+// GET /api/cover-status - Check if cover search is available
+app.get('/api/cover-status', (req, res) => {
+  res.json({ available: !!RAWG_API_KEY });
+});
+
+// GET /api/search-cover - Search for game cover art via RAWG API
+app.get('/api/search-cover', async (req, res) => {
+  try {
+    const query = req.query.q;
+    if (!query || query.trim().length === 0) {
+      return res.status(400).json({ error: "Query parameter 'q' is required." });
+    }
+
+    if (!RAWG_API_KEY) {
+      return res.status(503).json({ 
+        error: "Cover search is not configured. Set the RAWG_API_KEY environment variable.",
+        hint: "Get a free API key at https://rawg.io/apidocs" 
+      });
+    }
+
+    const url = `https://api.rawg.io/api/games?search=${encodeURIComponent(query.trim())}&key=${RAWG_API_KEY}&page_size=8`;
+    const rawgRes = await fetch(url);
+
+    if (!rawgRes.ok) {
+      const errText = await rawgRes.text();
+      console.error("RAWG API error:", rawgRes.status, errText);
+      return res.status(502).json({ error: "Failed to fetch results from RAWG API." });
+    }
+
+    const data = await rawgRes.json();
+    const results = (data.results || []).map(game => ({
+      name: game.name,
+      released: game.released || null,
+      coverUrl: game.background_image || '',
+      genres: (game.genres || []).map(g => g.name).join(', '),
+      platforms: (game.platforms || []).map(p => p.platform.name).join(', '),
+      rating: game.rating || 0
+    }));
+
+    res.json(results);
+  } catch (error) {
+    console.error("Cover search error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Start the server
 app.listen(PORT, () => {
   loadDatabase(); // Initialize and seed database on startup
@@ -366,5 +413,6 @@ app.listen(PORT, () => {
   console.log(`Game Collection Tracker server is running!`);
   console.log(`Access the tracker at: http://localhost:${PORT}`);
   console.log(`Database File: ${DB_PATH}`);
+  console.log(`Cover Search: ${RAWG_API_KEY ? 'Enabled (RAWG)' : 'Disabled (set RAWG_API_KEY)'}`);
   console.log(`==================================================`);
 });
