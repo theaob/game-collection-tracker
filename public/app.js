@@ -712,27 +712,35 @@ function setupEventListeners() {
     openAddGameModal();
   });
 
-  // Event delegation for dynamically rendered game card buttons
+  // Event delegation for dynamically rendered game cards and actions
   gamesGrid.addEventListener('click', (e) => {
+    // 1. Check if the click is on an action button (Edit / Delete)
     const actionBtn = e.target.closest('[data-action]');
-    if (!actionBtn) return;
+    if (actionBtn) {
+      const action = actionBtn.getAttribute('data-action');
+      const gameId = actionBtn.getAttribute('data-game-id');
+      if (!gameId) return;
 
-    const action = actionBtn.getAttribute('data-action');
-    const gameId = actionBtn.getAttribute('data-game-id');
-    if (!gameId) return;
+      e.stopPropagation();
 
-    e.stopPropagation();
+      switch (action) {
+        case 'edit':
+          openEditGameModal(gameId);
+          break;
+        case 'delete':
+          deleteGame(gameId);
+          break;
+      }
+      return;
+    }
 
-    switch (action) {
-      case 'edit':
-        openEditGameModal(gameId);
-        break;
-      case 'delete':
-        deleteGame(gameId);
-        break;
-      case 'play':
-        togglePlayTime(gameId, e);
-        break;
+    // 2. Otherwise, check if we clicked on the game card body to open details
+    const gameCard = e.target.closest('.game-card');
+    if (gameCard) {
+      const gameId = gameCard.getAttribute('data-id');
+      if (gameId) {
+        openGameDetailsModal(gameId);
+      }
     }
   });
 
@@ -740,12 +748,12 @@ function setupEventListeners() {
   document.getElementById('modal-close-x').addEventListener('click', () => closeModal(gameModal));
   document.getElementById('modal-cancel-btn').addEventListener('click', () => closeModal(gameModal));
   
-  // Rating Star Picker clicks inside modal form
-  starsContainer.querySelectorAll('i').forEach(star => {
-    star.addEventListener('click', (e) => {
-      const ratingVal = parseInt(star.getAttribute('data-value'));
-      setFormRatingStars(ratingVal);
-    });
+  // Rating Star Picker clicks inside modal form (using delegation to survive Lucide compiles)
+  starsContainer.addEventListener('click', (e) => {
+    const star = e.target.closest('[data-value]');
+    if (!star) return;
+    const ratingVal = parseInt(star.getAttribute('data-value'));
+    setFormRatingStars(ratingVal);
   });
 
   // Custom Platform input toggler
@@ -849,6 +857,10 @@ function setupEventListeners() {
   backToLibraryBtn.addEventListener('click', () => {
     showLibraryView();
   });
+
+  // Game Details Modal close triggers
+  document.getElementById('details-close-x').addEventListener('click', () => closeModal(detailsModal));
+  document.getElementById('details-close-btn').addEventListener('click', () => closeModal(detailsModal));
 
   // Close modals on clicking backdrop overlay
   document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
@@ -1214,4 +1226,84 @@ function formatHours(hrs) {
   if (hrs === undefined || hrs === null) return '0h';
   if (hrs < 0.1 && hrs > 0) return '0.1h';
   return `${hrs.toFixed(1).replace('.0', '')}h`;
+}
+
+// ----------------------------------------------------
+// GAME DETAILS VIEW MODAL
+// ----------------------------------------------------
+
+function openGameDetailsModal(id) {
+  const game = games.find(g => g.id === id);
+  if (!game) return;
+
+  // Set details labels
+  detailsTitle.textContent = game.title;
+  detailsStatus.textContent = game.status || 'Backlog';
+  detailsStatus.className = `badge-status ${(game.status || 'backlog').toLowerCase()}`;
+  detailsPlatform.textContent = game.platform;
+  
+  // Format storefront details
+  let formatText = game.format || 'Physical';
+  let formatIcon = 'package';
+  if (formatText.includes('Steam')) formatIcon = 'steam-logo';
+  if (formatText.includes('Digital')) {
+    formatIcon = 'cloud';
+    formatText = formatText.replace('Digital - ', '');
+  }
+  detailsFormat.innerHTML = `<i data-lucide="${formatIcon}" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 4px;"></i><span>${formatText}</span>`;
+
+  detailsPlaytime.textContent = formatHours(game.playtime);
+  detailsRelease.textContent = game.releaseYear || 'N/A';
+  detailsGenre.textContent = game.genre || 'N/A';
+  detailsRating.innerHTML = generateStarsHTML(game.rating || 0);
+  detailsNotes.textContent = game.notes || 'No review notes written yet.';
+
+  // Image or fallback gradient
+  if (game.coverUrl) {
+    detailsCoverContainer.innerHTML = `
+      <img src="${game.coverUrl}" alt="${game.title} cover" class="details-cover-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+    `;
+  } else {
+    detailsCoverContainer.innerHTML = '';
+  }
+
+  // Create fallback cover element
+  const fallbackHTML = document.createElement('div');
+  fallbackHTML.className = 'details-cover-fallback';
+  fallbackHTML.id = `details-fallback-${game.id}`;
+  fallbackHTML.innerHTML = `
+    <i data-lucide="gamepad-2" style="width: 32px; height: 32px; opacity: 0.8; margin-bottom: 8px;"></i>
+    <span style="font-weight: 700; font-size: 13px; line-height: 1.3;">${game.title}</span>
+  `;
+  detailsCoverContainer.appendChild(fallbackHTML);
+
+  // Apply fallback gradient
+  if (!game.coverUrl) {
+    let hash = 0;
+    for (let i = 0; i < game.title.length; i++) {
+      hash = game.title.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const h1 = Math.abs(hash % 360);
+    const h2 = (h1 + 60) % 360;
+    fallbackHTML.style.background = `linear-gradient(135deg, hsl(${h1}, 45%, 15%) 0%, hsl(${h2}, 45%, 8%) 100%)`;
+  }
+
+  // Bind footer button callbacks
+  detailsDeleteBtn.onclick = (e) => {
+    e.stopPropagation();
+    closeModal(detailsModal);
+    deleteGame(game.id);
+  };
+
+  detailsEditBtn.onclick = (e) => {
+    e.stopPropagation();
+    closeModal(detailsModal);
+    openEditGameModal(game.id);
+  };
+
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
+
+  openModal(detailsModal);
 }
