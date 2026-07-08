@@ -1107,6 +1107,13 @@ body {
   transform: translateY(0) scale(1);
 }
 
+.modal-card form {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(90vh - 61px); /* Accounts for modal header height */
+  overflow: hidden;
+}
+
 .modal-card.modal-small {
   max-width: 480px;
 }

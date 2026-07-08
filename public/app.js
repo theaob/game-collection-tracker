@@ -945,6 +945,25 @@ function setupEventListeners() {
   backToLibraryBtn.addEventListener('click', () => {
     showLibraryView();
   });
+
+  // Close modals on clicking backdrop overlay
+  document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) {
+        closeModal(backdrop);
+      }
+    });
+  });
+
+  // Close active modals on pressing Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const activeModal = document.querySelector('.modal-backdrop.show');
+      if (activeModal) {
+        closeModal(activeModal);
+      }
+    }
+  });
 }
 
 // ----------------------------------------------------
