@@ -11,10 +11,20 @@ let activeFilters = {
 let sortBy = 'added-desc';
 let viewMode = 'grid'; // 'grid' or 'list'
 
-// Playtime Live Tracker State
-let activeTimerId = null;
-let activeTimerStart = null;
-let timerInterval = null;
+// Details Modal Elements
+const detailsModal = document.getElementById('details-modal');
+const detailsCoverContainer = document.getElementById('details-cover-container');
+const detailsTitle = document.getElementById('details-title');
+const detailsStatus = document.getElementById('details-status');
+const detailsPlatform = document.getElementById('details-platform');
+const detailsFormat = document.getElementById('details-format');
+const detailsPlaytime = document.getElementById('details-playtime');
+const detailsRelease = document.getElementById('details-release');
+const detailsGenre = document.getElementById('details-genre');
+const detailsRating = document.getElementById('details-rating');
+const detailsNotes = document.getElementById('details-notes');
+const detailsDeleteBtn = document.getElementById('details-delete-btn');
+const detailsEditBtn = document.getElementById('details-edit-btn');
 
 // DOM Elements
 const gamesGrid = document.getElementById('games-grid');
@@ -88,9 +98,6 @@ function initApp() {
     viewMode = savedViewMode;
     updateViewModeButtons();
   }
-
-  // Restore active timer if page was refreshed
-  restoreActiveTimer();
 
   // Setup Event Listeners
   setupEventListeners();
@@ -167,11 +174,6 @@ async function deleteGame(id) {
   const title = game ? game.title : 'this game';
   if (!confirm(`Are you sure you want to delete "${title}"? This action cannot be undone.`)) {
     return;
-  }
-
-  // If deleting the currently tracked game, stop timer first
-  if (activeTimerId === id) {
-    stopPlayTimer(false); // Stop without saving
   }
 
   try {
@@ -284,7 +286,6 @@ function renderLibrary() {
 }
 
 function createGameCardHTML(game) {
-  const isTrackingThis = activeTimerId === game.id;
   const ratingStars = generateStarsHTML(game.rating);
   const statusLower = (game.status || 'backlog').toLowerCase();
   
@@ -313,7 +314,7 @@ function createGameCardHTML(game) {
   `;
 
   return `
-    <div class="game-card ${isTrackingThis ? 'tracking-active' : ''}" data-id="${game.id}">
+    <div class="game-card" data-id="${game.id}">
       <div class="game-cover-wrapper">
         ${coverHTML}
         ${fallbackHTML}
@@ -354,13 +355,8 @@ function createGameCardHTML(game) {
         <div class="game-card-playtime">
           <div class="playtime-display">
             <i data-lucide="clock"></i>
-            <span>Playtime: <span class="time-val" id="time-val-${game.id}">${formatHours(game.playtime)}</span></span>
+            <span>Playtime: <span class="time-val">${formatHours(game.playtime)}</span></span>
           </div>
-          <button class="game-play-btn ${isTrackingThis ? 'tracking' : ''}" 
-                  data-action="play" data-game-id="${game.id}"
-                  title="${isTrackingThis ? 'Stop tracking session' : 'Start playing'}">
-            <i data-lucide="${isTrackingThis ? 'loader' : 'play'}"></i>
-          </button>
         </div>
       </div>
     </div>
@@ -520,140 +516,6 @@ function updateStatsUI(stats) {
 // ----------------------------------------------------
 // PLAYTIME LIVE TIMER (MICRO-FEATURE WITH RECOVERY)
 // ----------------------------------------------------
-
-function togglePlayTime(gameId, event) {
-  if (event) event.stopPropagation();
-
-  if (activeTimerId === null) {
-    // Start tracking playtime for this game
-    startPlayTimer(gameId);
-  } else if (activeTimerId === gameId) {
-    // Stop tracking playtime
-    stopPlayTimer(true);
-  } else {
-    // Stop tracking old game first, then start new one
-    stopPlayTimer(true);
-    startPlayTimer(gameId);
-  }
-}
-
-function startPlayTimer(gameId) {
-  const game = games.find(g => g.id === gameId);
-  if (!game) return;
-
-  activeTimerId = gameId;
-  activeTimerStart = Date.now();
-
-  // Save tracking state to localstorage to recover on reload
-  localStorage.setItem('gamevault_active_timer_id', activeTimerId);
-  localStorage.setItem('gamevault_active_timer_start', activeTimerStart.toString());
-
-  // Update card UI
-  renderLibrary();
-  showToast(`Now tracking session for "${game.title}"`, 'success');
-
-  // Trigger continuous UI updater for clock
-  const timeValEl = document.getElementById(`time-val-${gameId}`);
-  const initialTime = game.playtime;
-
-  timerInterval = setInterval(() => {
-    const elapsedHrs = (Date.now() - activeTimerStart) / 3600000;
-    const totalTime = initialTime + elapsedHrs;
-    if (timeValEl) {
-      timeValEl.textContent = formatHours(totalTime);
-    }
-  }, 1000);
-}
-
-async function stopPlayTimer(shouldSave = true) {
-  if (activeTimerId === null) return;
-
-  clearInterval(timerInterval);
-  timerInterval = null;
-
-  const gameId = activeTimerId;
-  const elapsedHrs = (Date.now() - activeTimerStart) / 3600000;
-  
-  // Clear states
-  activeTimerId = null;
-  activeTimerStart = null;
-  localStorage.removeItem('gamevault_active_timer_id');
-  localStorage.removeItem('gamevault_active_timer_start');
-
-  const game = games.find(g => g.id === gameId);
-  
-  if (shouldSave && game && elapsedHrs > 0.001) { // Save session if it's more than a few seconds
-    const addedTime = parseFloat(elapsedHrs.toFixed(2));
-    const newPlaytime = parseFloat((game.playtime + addedTime).toFixed(2));
-    
-    showToast(`Play session ended for "${game.title}" (+${formatHours(addedTime)})`, 'info');
-
-    // Sync back to database
-    try {
-      const res = await fetch(`/api/games/${gameId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playtime: newPlaytime, status: 'Playing' }) // Auto set to playing if tracking active session
-      });
-      
-      if (!res.ok) throw new Error("Failed to save tracked playtime on server.");
-      
-      fetchGames(); // Re-sync entire frontend
-    } catch (error) {
-      showToast(error.message, 'error');
-      renderLibrary(); // Re-render local state anyway to sync display
-    }
-  } else {
-    // Just refresh view to reset buttons
-    renderLibrary();
-  }
-}
-
-function restoreActiveTimer() {
-  const savedId = localStorage.getItem('gamevault_active_timer_id');
-  const savedStart = localStorage.getItem('gamevault_active_timer_start');
-
-  if (savedId && savedStart) {
-    activeTimerId = savedId;
-    activeTimerStart = parseInt(savedStart);
-    
-    // Re-trigger live timer update
-    const game = games.find(g => g.id === activeTimerId);
-    
-    // We will start interval updates as soon as the games are loaded.
-    // To do that, we hook it into renderLibrary() once games array is ready.
-    // So let's write an interval checker that starts when games are loaded:
-    let checkLoaded = setInterval(() => {
-      if (games.length > 0) {
-        clearInterval(checkLoaded);
-        
-        // Find if game still exists
-        const checkGame = games.find(g => g.id === activeTimerId);
-        if (!checkGame) {
-          localStorage.removeItem('gamevault_active_timer_id');
-          localStorage.removeItem('gamevault_active_timer_start');
-          activeTimerId = null;
-          activeTimerStart = null;
-          return;
-        }
-
-        renderLibrary();
-        
-        const timeValEl = document.getElementById(`time-val-${activeTimerId}`);
-        const initialTime = checkGame.playtime;
-
-        timerInterval = setInterval(() => {
-          if (!activeTimerStart) return;
-          const elapsedHrs = (Date.now() - activeTimerStart) / 3600000;
-          const totalTime = initialTime + elapsedHrs;
-          if (timeValEl) {
-            timeValEl.textContent = formatHours(totalTime);
-          }
-        }, 1000);
-      }
-    }, 100);
-  }
-}
 
 // ----------------------------------------------------
 // FILTERING AND DROPDOWNS POPULATION
@@ -1224,15 +1086,13 @@ function openEditGameModal(id) {
 
 function setFormRatingStars(ratingVal) {
   gameRatingInput.value = ratingVal;
-  starsContainer.querySelectorAll('i').forEach((star, index) => {
+  starsContainer.querySelectorAll('[data-value]').forEach((star, index) => {
     if (index < ratingVal) {
       star.classList.add('filled');
-      star.setAttribute('data-lucide', 'star');
     } else {
       star.classList.remove('filled');
     }
   });
-  if (window.lucide) window.lucide.createIcons();
 }
 
 // ----------------------------------------------------

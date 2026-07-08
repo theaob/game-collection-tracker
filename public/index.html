@@ -475,6 +475,71 @@
     </div>
   </div>
 
+  <!-- Game Details Modal -->
+  <div class="modal-backdrop" id="details-modal" style="display: none;">
+    <div class="modal-card modal-medium">
+      <div class="modal-header">
+        <h3>Game Details</h3>
+        <button class="modal-close-btn" id="details-close-x" title="Close details">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="details-container">
+          <div class="details-cover-column">
+            <div class="details-cover-wrapper" id="details-cover-container"></div>
+          </div>
+          <div class="details-info-column">
+            <h2 id="details-title" class="details-game-title">Game Title</h2>
+            
+            <div class="details-badge-row">
+              <span class="badge-status" id="details-status">Backlog</span>
+              <span class="game-platform-pill" id="details-platform">Platform</span>
+              <span class="badge-format" id="details-format">Format</span>
+            </div>
+
+            <div class="details-meta-grid">
+              <div class="meta-item">
+                <span class="meta-label">Playtime</span>
+                <span class="meta-value" id="details-playtime">0h</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Release Year</span>
+                <span class="meta-value" id="details-release">N/A</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Genre</span>
+                <span class="meta-value" id="details-genre">N/A</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Rating</span>
+                <div class="stars-display" id="details-rating"></div>
+              </div>
+            </div>
+
+            <div class="details-notes-section">
+              <h4>Notes & Personal Review</h4>
+              <p id="details-notes" class="details-notes-content">No review notes written yet.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary delete-btn" id="details-delete-btn" style="border-color: var(--color-abandoned); color: var(--color-abandoned);">
+          <i data-lucide="trash-2"></i>
+          <span>Delete Game</span>
+        </button>
+        <button type="button" class="btn btn-secondary" id="details-edit-btn">
+          <i data-lucide="edit-3"></i>
+          <span>Edit Details</span>
+        </button>
+        <button type="button" class="btn btn-primary" id="details-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification System -->
   <div class="toast-container" id="toast-container"></div>
 
