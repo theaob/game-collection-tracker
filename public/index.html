@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GameVault - Self-Hosted Game Collection Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <i data-lucide="gamepad-2" class="logo-icon"></i>
+        <span>GameVault</span>
+      </div>
+    </div>
+    
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" id="nav-all">
+        <i data-lucide="library"></i>
+        <span>Library</span>
+      </a>
+      <a href="#" class="nav-item" id="nav-stats-trigger">
+        <i data-lucide="bar-chart-3"></i>
+        <span>Analysis</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="stats-mini">
+        <div class="stat-mini-item">
+          <span class="label">Total Library</span>
+          <span class="value" id="mini-total-games">0</span>
+        </div>
+        <div class="stat-mini-item">
+          <span class="label">Playtime</span>
+          <span class="value" id="mini-total-playtime">0h</span>
+        </div>
+      </div>
+      
+      <div class="platform-sidebar-section">
+        <h3>Platforms</h3>
+        <ul id="sidebar-platforms" class="sidebar-list">
+          <!-- Populated dynamically -->
+        </ul>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content Container -->
+  <main class="main-content">
+    
+    <!-- Top Action Bar -->
+    <header class="header">
+      <div class="search-container">
+        <i data-lucide="search" class="search-icon"></i>
+        <input type="text" id="search-input" placeholder="Search games by title, genre, notes...">
+        <button id="search-clear-btn" class="clear-btn" style="display: none;">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      
+      <div class="header-actions">
+        <button class="btn btn-secondary icon-btn" id="settings-btn" title="Backup & Settings">
+          <i data-lucide="settings"></i>
+        </button>
+        <button class="btn btn-primary" id="add-game-btn">
+          <i data-lucide="plus"></i>
+          <span>Add Game</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Dashboard Views -->
+    <div class="content-body">
+      
+      <!-- Stats / Dashboard Row -->
+      <section class="dashboard-stats-grid" id="stats-dashboard">
+        <div class="status-card backlog" data-filter-status="Backlog">
+          <div class="status-card-inner">
+            <div class="status-info">
+              <span class="status-label">Backlog</span>
+              <span class="status-count" id="count-backlog">0</span>
+            </div>
+            <div class="status-icon-wrapper">
+              <i data-lucide="list-todo"></i>
+            </div>
+          </div>
+          <div class="status-card-progress"></div>
+        </div>
+
+        <div class="status-card playing" data-filter-status="Playing">
+          <div class="status-card-inner">
+            <div class="status-info">
+              <span class="status-label">Now Playing</span>
+              <span class="status-count" id="count-playing">0</span>
+            </div>
+            <div class="status-icon-wrapper">
+              <i data-lucide="play-circle"></i>
+            </div>
+          </div>
+          <div class="status-card-progress"></div>
+        </div>
+
+        <div class="status-card completed" data-filter-status="Completed">
+          <div class="status-card-inner">
+            <div class="status-info">
+              <span class="status-label">Completed</span>
+              <span class="status-count" id="count-completed">0</span>
+            </div>
+            <div class="status-icon-wrapper">
+              <i data-lucide="trophy"></i>
+            </div>
+          </div>
+          <div class="status-card-progress"></div>
+        </div>
+
+        <div class="status-card abandoned" data-filter-status="Abandoned">
+          <div class="status-card-inner">
+            <div class="status-info">
+              <span class="status-label">Abandoned</span>
+              <span class="status-count" id="count-abandoned">0</span>
+            </div>
+            <div class="status-icon-wrapper">
+              <i data-lucide="heart-off"></i>
+            </div>
+          </div>
+          <div class="status-card-progress"></div>
+        </div>
+      </section>
+
+      <!-- Library Filtering & Controls Header -->
+      <section class="library-header">
+        <div class="library-title-group">
+          <h2 id="library-current-view">All Games</h2>
+          <span class="games-badge" id="library-count-badge">0 Games</span>
+        </div>
+        
+        <div class="library-controls">
+          <div class="filter-group">
+            <label for="filter-platform">Platform</label>
+            <select id="filter-platform" class="select-control">
+              <option value="All">All Platforms</option>
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="filter-format">Format / Store</label>
+            <select id="filter-format" class="select-control">
+              <option value="All">All Formats</option>
+              <option value="Physical">Physical Copies</option>
+              <option value="Digital - Steam">Digital - Steam</option>
+              <option value="Digital - Epic">Digital - Epic</option>
+              <option value="Digital - GOG">Digital - GOG</option>
+              <option value="Digital - PSN">Digital - PSN</option>
+              <option value="Digital - Xbox Store">Digital - Xbox Store</option>
+              <option value="Digital - Nintendo eShop">Digital - Nintendo eShop</option>
+              <option value="Digital - Other">Digital - Other</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="sort-by">Sort By</label>
+            <select id="sort-by" class="select-control">
+              <option value="added-desc">Date Added (Newest)</option>
+              <option value="added-asc">Date Added (Oldest)</option>
+              <option value="title-asc">Title (A-Z)</option>
+              <option value="title-desc">Title (Z-A)</option>
+              <option value="playtime-desc">Playtime (Most)</option>
+              <option value="rating-desc">Rating (Highest)</option>
+              <option value="release-desc">Release Year (Newest)</option>
+            </select>
+          </div>
+
+          <div class="view-toggle-container">
+            <button id="view-grid-btn" class="toggle-btn active" title="Grid View">
+              <i data-lucide="layout-grid"></i>
+            </button>
+            <button id="view-list-btn" class="toggle-btn" title="List View">
+              <i data-lucide="list"></i>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Active Filters Tag Bar -->
+      <section class="active-filters-bar" id="active-filters-container" style="display: none;">
+        <span class="filter-bar-label">Active Filters:</span>
+        <div class="filter-tags" id="filter-tags-list">
+          <!-- Tags go here -->
+        </div>
+        <button class="clear-filters-btn" id="clear-all-filters">Clear All</button>
+      </section>
+
+      <!-- Analysis / Analytics View (Hidden by Default) -->
+      <section class="analysis-view" id="analysis-section" style="display: none;">
+        <div class="analysis-header">
+          <h2>Library Analytics</h2>
+          <button class="btn btn-secondary" id="back-to-library-btn">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Library</span>
+          </button>
+        </div>
+        
+        <div class="analysis-grid">
+          <div class="analysis-card stats-summary-large">
+            <h3>Library Statistics</h3>
+            <div class="stats-large-grid">
+              <div class="stat-large-item">
+                <i data-lucide="gamepad" class="stat-large-icon bg-indigo"></i>
+                <div class="stat-large-info">
+                  <span class="stat-large-val" id="stats-total-games">0</span>
+                  <span class="stat-large-lbl">Total Games Owned</span>
+                </div>
+              </div>
+              <div class="stat-large-item">
+                <i data-lucide="clock" class="stat-large-icon bg-emerald"></i>
+                <div class="stat-large-info">
+                  <span class="stat-large-val" id="stats-total-hours">0h</span>
+                  <span class="stat-large-lbl">Total Time Played</span>
+                </div>
+              </div>
+              <div class="stat-large-item">
+                <i data-lucide="award" class="stat-large-icon bg-blue"></i>
+                <div class="stat-large-info">
+                  <span class="stat-large-val" id="stats-average-rating">0.0</span>
+                  <span class="stat-large-lbl">Average Rating (1-5)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="analysis-card platform-distribution">
+            <h3>Games by Platform</h3>
+            <div id="analytics-platform-chart" class="chart-container">
+              <!-- Visualized via CSS Bar charts dynamically -->
+            </div>
+          </div>
+
+          <div class="analysis-card format-distribution">
+            <h3>Format Breakdown</h3>
+            <div class="format-progress-bar-container">
+              <div class="format-bar-labels">
+                <span>Physical</span>
+                <span>Digital</span>
+              </div>
+              <div class="format-bar-track">
+                <div id="format-bar-physical" class="format-bar-fill bg-indigo" style="width: 50%"></div>
+                <div id="format-bar-digital" class="format-bar-fill bg-violet" style="width: 50%"></div>
+              </div>
+              <div class="format-bar-values">
+                <span id="format-val-physical">0 games (0%)</span>
+                <span id="format-val-digital">0 games (0%)</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="analysis-card status-distribution">
+            <h3>Completion Rate</h3>
+            <div class="completion-rate-container">
+              <div class="circle-progress-wrapper">
+                <!-- Circular SVG Progress -->
+                <svg viewBox="0 0 36 36" class="circular-chart">
+                  <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                  <path id="completion-circle-fill" class="circle" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                  <text x="18" y="20.35" class="percentage" id="completion-circle-text">0%</text>
+                </svg>
+              </div>
+              <div class="completion-details">
+                <p>Completion rate represents the percentage of games marked as <strong class="text-blue">Completed</strong> relative to your total library (excluding Abandoned games).</p>
+                <div class="completion-formula">
+                  <span>Completed / (Total - Abandoned)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Games Grid Container -->
+      <section class="games-catalog-container" id="library-section">
+        <div id="games-grid" class="games-grid">
+          <!-- Game cards will be injected here dynamically -->
+        </div>
+        
+        <!-- Empty State Container -->
+        <div id="empty-state" class="empty-state" style="display: none;">
+          <div class="empty-state-icon">
+            <i data-lucide="package-open"></i>
+          </div>
+          <h3>No games found</h3>
+          <p>We couldn't find any games matching your search criteria or filters. Try adjusting your settings, or add a new game.</p>
+          <button class="btn btn-primary" id="empty-state-add-btn">Add New Game</button>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Add/Edit Game Modal -->
+  <div class="modal-backdrop" id="game-modal" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-title">Add New Game</h3>
+        <button class="modal-close-btn" id="modal-close-x">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      
+      <form id="game-form" onsubmit="return false;">
+        <input type="hidden" id="game-id-input">
+        
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group col-12">
+              <label for="game-title">Game Title *</label>
+              <input type="text" id="game-title" class="form-control" required placeholder="e.g. Elden Ring, Persona 5 Royal">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="game-platform">Platform *</label>
+              <div class="platform-input-container">
+                <select id="game-platform" class="form-control" required>
+                  <option value="" disabled selected>Select Platform</option>
+                  <option value="PC">PC</option>
+                  <option value="Nintendo Switch">Nintendo Switch</option>
+                  <option value="PlayStation 5">PlayStation 5</option>
+                  <option value="PlayStation 4">PlayStation 4</option>
+                  <option value="Xbox Series X/S">Xbox Series X/S</option>
+                  <option value="Xbox One">Xbox One</option>
+                  <option value="Retro">Retro Console</option>
+                  <option value="CUSTOM_ADD">+ Add Custom Platform</option>
+                </select>
+                <input type="text" id="custom-platform-input" class="form-control mt-2" placeholder="Enter platform name" style="display: none;">
+              </div>
+            </div>
+
+            <div class="form-group col-6">
+              <label for="game-format">Format / Storefront</label>
+              <select id="game-format" class="form-control">
+                <option value="Physical">Physical Copy</option>
+                <option value="Digital - Steam">Digital - Steam</option>
+                <option value="Digital - Epic">Digital - Epic</option>
+                <option value="Digital - GOG">Digital - GOG</option>
+                <option value="Digital - PSN">Digital - PSN</option>
+                <option value="Digital - Xbox Store">Digital - Xbox Store</option>
+                <option value="Digital - Nintendo eShop">Digital - Nintendo eShop</option>
+                <option value="Digital - Other">Digital - Other Storefront</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="game-status">Status</label>
+              <select id="game-status" class="form-control">
+                <option value="Backlog">Backlog</option>
+                <option value="Playing">Playing</option>
+                <option value="Completed">Completed</option>
+                <option value="Abandoned">Abandoned</option>
+              </select>
+            </div>
+
+            <div class="form-group col-6">
+              <label for="game-playtime">Playtime (Hours)</label>
+              <input type="number" id="game-playtime" class="form-control" min="0" step="0.1" value="0">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label>Rating</label>
+              <div class="rating-stars-input" id="rating-stars-container">
+                <i data-lucide="star" data-value="1"></i>
+                <i data-lucide="star" data-value="2"></i>
+                <i data-lucide="star" data-value="3"></i>
+                <i data-lucide="star" data-value="4"></i>
+                <i data-lucide="star" data-value="5"></i>
+              </div>
+              <input type="hidden" id="game-rating" value="0">
+            </div>
+
+            <div class="form-group col-3">
+              <label for="game-release">Release Year</label>
+              <input type="number" id="game-release" class="form-control" min="1950" max="2100" placeholder="e.g. 2024">
+            </div>
+
+            <div class="form-group col-3">
+              <label for="game-genre">Genre</label>
+              <input type="text" id="game-genre" class="form-control" placeholder="e.g. RPG, FPS">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-12">
+              <label for="game-cover">Cover Image URL</label>
+              <input type="url" id="game-cover" class="form-control" placeholder="https://example.com/cover.jpg (Leave empty for fallback generator)">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-12">
+              <label for="game-notes">Notes & Personal Review</label>
+              <textarea id="game-notes" class="form-control" rows="3" placeholder="Write down your experiences, achievements, completion details..."></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="modal-cancel-btn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="modal-submit-btn">Save Game</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Settings / Backup Modal -->
+  <div class="modal-backdrop" id="settings-modal" style="display: none;">
+    <div class="modal-card modal-small">
+      <div class="modal-header">
+        <h3>Backup & Settings</h3>
+        <button class="modal-close-btn" id="settings-close-x">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="settings-section">
+          <h4>Export Library</h4>
+          <p class="settings-desc">Download a backup of your entire library as a single JSON file. You can restore this backup at any time on this or another deployment.</p>
+          <a href="/api/export" download class="btn btn-secondary w-100 text-center flex-center">
+            <i data-lucide="download"></i>
+            <span>Download JSON Backup</span>
+          </a>
+        </div>
+
+        <hr class="settings-divider">
+
+        <div class="settings-section">
+          <h4>Import Library</h4>
+          <p class="settings-desc">Upload a previously exported JSON backup file. <span class="text-rose font-semibold">WARNING: This will completely replace your current database!</span></p>
+          
+          <div class="import-dropzone" id="import-dropzone">
+            <i data-lucide="upload-cloud"></i>
+            <span class="dropzone-text">Click to select file or drag & drop</span>
+            <input type="file" id="import-file-input" accept=".json" style="display:none;">
+          </div>
+          <div id="import-filename" class="import-filename-display" style="display:none;">
+            <i data-lucide="file-json"></i>
+            <span id="import-filename-text">backup.json</span>
+            <button id="remove-import-file-btn" class="clear-btn"><i data-lucide="x"></i></button>
+          </div>
+          
+          <button class="btn btn-primary w-100 mt-3" id="import-submit-btn" disabled>
+            <i data-lucide="refresh-cw"></i>
+            <span>Confirm Import & Overwrite</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification System -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Load Lucide Icons CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@latest"></script>
+  <!-- Main Frontend App -->
+  <script src="app.js"></script>
+</body>
+</html>
