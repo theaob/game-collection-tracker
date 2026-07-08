@@ -8,6 +8,23 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load local .env file if it exists (convenience for development)
+const ENV_PATH = path.join(__dirname, '.env');
+if (fs.existsSync(ENV_PATH)) {
+  const envContent = fs.readFileSync(ENV_PATH, 'utf8');
+  envContent.split(/\r?\n/).forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    const splitIdx = trimmed.indexOf('=');
+    if (splitIdx === -1) return;
+    const key = trimmed.substring(0, splitIdx).trim();
+    const val = trimmed.substring(splitIdx + 1).trim().replace(/^['"]|['"]$/g, '');
+    if (key && val && !process.env[key]) {
+      process.env[key] = val;
+    }
+  });
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const RAWG_API_KEY = process.env.RAWG_API_KEY || '';
