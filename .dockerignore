@@ -1,0 +1,20 @@
+# Ignore local node_modules
+node_modules/
+
+# Ignore local databases and backups (these must be mounted dynamically via volumes)
+data/
+
+# Ignore logs
+logs/
+*.log
+npm-debug.log*
+
+# Ignore Git files and documentation
+.git/
+.gitignore
+.agents/
+.gemini/
+
+# Ignore Docker files
+Dockerfile
+.dockerignore
