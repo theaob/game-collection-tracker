@@ -540,6 +540,30 @@
     </div>
   </div>
 
+  <!-- Delete Confirmation Modal -->
+  <div class="modal-backdrop" id="delete-confirm-modal" style="display: none;">
+    <div class="modal-card modal-small">
+      <div class="modal-header">
+        <h3>Confirm Delete</h3>
+        <button class="modal-close-btn" id="delete-confirm-close-x" title="Close confirmation">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="delete-confirm-content">
+          <div class="delete-confirm-icon-wrapper">
+            <i data-lucide="alert-triangle"></i>
+          </div>
+          <p>Are you sure you want to delete <strong id="delete-confirm-game-title"></strong>? This action cannot be undone.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="delete-confirm-cancel-btn">Cancel</button>
+        <button type="button" class="btn btn-danger" id="delete-confirm-ok-btn">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification System -->
   <div class="toast-container" id="toast-container"></div>
 

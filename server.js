@@ -398,7 +398,22 @@ app.get('/api/search-cover', async (req, res) => {
     }
 
     const url = `https://api.rawg.io/api/games?search=${encodeURIComponent(query.trim())}&key=${RAWG_API_KEY}&page_size=8`;
-    const rawgRes = await fetch(url);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    let rawgRes;
+    try {
+      rawgRes = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        console.error("RAWG API search timed out for query:", query);
+        return res.status(504).json({ error: "Search request to RAWG API timed out (6s)." });
+      }
+      throw fetchError;
+    }
 
     if (!rawgRes.ok) {
       const errText = await rawgRes.text();

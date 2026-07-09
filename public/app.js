@@ -60,6 +60,10 @@ const starsContainer = document.getElementById('rating-stars-container');
 const settingsModal = document.getElementById('settings-modal');
 const settingsBtn = document.getElementById('settings-btn');
 const settingsCloseX = document.getElementById('settings-close-x');
+
+// Delete Confirmation Modal
+const deleteConfirmModal = document.getElementById('delete-confirm-modal');
+let gameIdToDelete = null;
 const importDropzone = document.getElementById('import-dropzone');
 const importFileInput = document.getElementById('import-file-input');
 const importFilenameDisplay = document.getElementById('import-filename');
@@ -169,12 +173,23 @@ async function saveGame(gameData) {
   }
 }
 
-async function deleteGame(id) {
+function deleteGame(id) {
+  const game = games.find(g => g.id === id);
+  if (!game) return;
+
+  gameIdToDelete = id;
+  document.getElementById('delete-confirm-game-title').textContent = `"${game.title}"`;
+  openModal(deleteConfirmModal);
+}
+
+async function confirmDeleteGame() {
+  if (!gameIdToDelete) return;
+  const id = gameIdToDelete;
   const game = games.find(g => g.id === id);
   const title = game ? game.title : 'this game';
-  if (!confirm(`Are you sure you want to delete "${title}"? This action cannot be undone.`)) {
-    return;
-  }
+
+  closeModal(deleteConfirmModal);
+  gameIdToDelete = null;
 
   try {
     const res = await fetch(`/api/games/${id}`, { method: 'DELETE' });
@@ -862,6 +877,19 @@ function setupEventListeners() {
   document.getElementById('details-close-x').addEventListener('click', () => closeModal(detailsModal));
   document.getElementById('details-close-btn').addEventListener('click', () => closeModal(detailsModal));
 
+  // Delete Confirmation Modal close/confirm triggers
+  document.getElementById('delete-confirm-close-x').addEventListener('click', () => {
+    closeModal(deleteConfirmModal);
+    gameIdToDelete = null;
+  });
+  document.getElementById('delete-confirm-cancel-btn').addEventListener('click', () => {
+    closeModal(deleteConfirmModal);
+    gameIdToDelete = null;
+  });
+  document.getElementById('delete-confirm-ok-btn').addEventListener('click', () => {
+    confirmDeleteGame();
+  });
+
   // Close modals on clicking backdrop overlay
   document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
     backdrop.addEventListener('click', (e) => {
@@ -893,7 +921,11 @@ function setupEventListeners() {
         return;
       }
 
-      // Display loading state
+      // Display loading state on button and results container
+      fetchCoverBtn.disabled = true;
+      const originalBtnHTML = fetchCoverBtn.innerHTML;
+      fetchCoverBtn.innerHTML = `<i data-lucide="loader" class="spin" style="width: 14px; height: 14px;"></i><span>Searching...</span>`;
+
       coverSearchResults.innerHTML = `
         <div class="cover-search-loading">
           <i data-lucide="loader"></i>
@@ -903,8 +935,12 @@ function setupEventListeners() {
       coverSearchResults.style.display = 'flex';
       if (window.lucide) window.lucide.createIcons();
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
+
       try {
-        const res = await fetch(`/api/search-cover?q=${encodeURIComponent(titleVal)}`);
+        const res = await fetch(`/api/search-cover?q=${encodeURIComponent(titleVal)}`, { signal: controller.signal });
+        clearTimeout(timeoutId);
         
         if (res.status === 503) {
           const err = await res.json();
@@ -974,19 +1010,29 @@ function setupEventListeners() {
         });
 
       } catch (error) {
+        clearTimeout(timeoutId);
+        let errMsg = error.message;
+        if (error.name === 'AbortError') {
+          errMsg = "Request timed out (7s). Please try again.";
+        }
         coverSearchResults.innerHTML = `
           <div class="cover-search-error">
             <i data-lucide="alert-triangle" style="color: var(--color-backlog); width: 18px; height: 18px;"></i>
-            <span>Error: ${error.message}</span>
+            <span>Error: ${errMsg}</span>
           </div>
         `;
+        if (window.lucide) window.lucide.createIcons();
+      } finally {
+        clearTimeout(timeoutId);
+        fetchCoverBtn.disabled = false;
+        fetchCoverBtn.innerHTML = originalBtnHTML;
         if (window.lucide) window.lucide.createIcons();
       }
     });
 
     // Close search box on click outside
     document.addEventListener('click', (e) => {
-      if (!coverSearchResults.contains(e.target) && e.target !== fetchCoverBtn && e.target !== document.getElementById('game-title')) {
+      if (!coverSearchResults.contains(e.target) && !fetchCoverBtn.contains(e.target) && e.target !== document.getElementById('game-title')) {
         coverSearchResults.style.display = 'none';
       }
     });

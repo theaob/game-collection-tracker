@@ -355,6 +355,18 @@ body {
   border-color: rgba(255, 255, 255, 0.2);
 }
 
+.btn-danger {
+  background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+  color: #fff;
+  box-shadow: 0 0 15px rgba(244, 63, 94, 0.4);
+}
+
+.btn-danger:hover {
+  background: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
+  box-shadow: 0 0 20px rgba(244, 63, 94, 0.6);
+  transform: translateY(-1px);
+}
+
 .icon-btn {
   padding: 12px;
   aspect-ratio: 1;
@@ -1650,6 +1662,11 @@ textarea.form-control {
   to { transform: rotate(360deg); }
 }
 
+.spin {
+  animation: rotate-loading 1.5s infinite linear;
+  display: inline-block;
+}
+
 /* Responsive Queries */
 @media (max-width: 1200px) {
   .dashboard-stats-grid {
@@ -1991,6 +2008,43 @@ textarea.form-control {
   .details-info-column {
     width: 100%;
   }
+}
+
+/* Delete Confirmation Modal Layout */
+.delete-confirm-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 16px 8px;
+  gap: 16px;
+}
+
+.delete-confirm-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(244, 63, 94, 0.1);
+  color: var(--color-abandoned);
+  border: 1px solid rgba(244, 63, 94, 0.25);
+  box-shadow: 0 0 15px rgba(244, 63, 94, 0.15);
+  margin-bottom: 8px;
+}
+
+.delete-confirm-icon-wrapper i {
+  width: 32px;
+  height: 32px;
+  stroke-width: 2px;
+}
+
+#delete-confirm-game-title {
+  color: var(--text-main);
+  font-weight: 700;
+  display: inline-block;
+  margin: 0 4px;
 }
 
 
