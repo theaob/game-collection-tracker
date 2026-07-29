@@ -11,6 +11,21 @@ let activeFilters = {
 let sortBy = 'added-desc';
 let viewMode = 'grid'; // 'grid' or 'list'
 
+// Session Timer State
+let activeSession = null; // { gameId, startTime, accumulatedMs }
+let sessionTimerInterval = null;
+
+// HTML Escaping Utility for XSS Prevention
+function escapeHTML(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // Details Modal Elements
 const detailsModal = document.getElementById('details-modal');
 const detailsCoverContainer = document.getElementById('details-cover-container');
@@ -106,10 +121,222 @@ function initApp() {
   // Setup Event Listeners
   setupEventListeners();
   
+  // Restore live session timer if saved in localStorage
+  initSessionTimer();
+  
+  // Initialize background floating elements
+  initFloatingBackground();
+  
   // Initial Lucide Icons compilation
   if (window.lucide) {
     window.lucide.createIcons();
   }
+}
+
+// Physics state for floating objects
+let floatingObjects = [];
+let animFrameId = null;
+
+// Spawns randomized floating game-themed icons in the background with elastic collisions
+function initFloatingBackground() {
+  const container = document.getElementById('floating-bg');
+  if (!container) return;
+
+  // Clear existing items & cancel any active loop
+  container.innerHTML = '';
+  floatingObjects = [];
+  if (animFrameId) {
+    cancelAnimationFrame(animFrameId);
+  }
+
+  const icons = [
+    'gamepad-2', 'swords', 'trophy', 'shield', 'star',
+    'crown', 'zap', 'key', 'disc', 'joystick', 'target', 'dribbble'
+  ];
+
+  // Increase object count as requested
+  const objectCount = 38;
+  
+  // Fallback to defaults if layout dimensions are not ready (0px viewport)
+  let width = window.innerWidth || 1200;
+  let height = window.innerHeight || 800;
+  if (width < 300) width = 1200;
+  if (height < 300) height = 800;
+
+  for (let i = 0; i < objectCount; i++) {
+    const el = document.createElement('div');
+    el.className = 'floating-object';
+    
+    const iconName = icons[Math.floor(Math.random() * icons.length)];
+    el.setAttribute('data-lucide', iconName);
+
+    const size = Math.floor(Math.random() * 25) + 25; // 25px to 50px
+    const radius = size / 2;
+
+    // Distribute randomly ensuring minimal overlap at spawn
+    let x, y, overlap;
+    let attempts = 0;
+    do {
+      x = Math.random() * (width - size);
+      y = Math.random() * (height - size);
+      overlap = false;
+      for (const obj of floatingObjects) {
+        const dx = obj.x - (x + radius);
+        const dy = obj.y - (y + radius);
+        const dist = Math.hypot(dx, dy);
+        if (dist < (obj.radius + radius + 15)) {
+          overlap = true;
+          break;
+        }
+      }
+      attempts++;
+    } while (overlap && attempts < 100);
+
+    // Initial space drift speeds (slightly faster and more visible)
+    const speed = Math.random() * 0.7 + 0.4; // 0.4 to 1.1 pixels per frame
+    const angleDir = Math.random() * Math.PI * 2;
+    const vx = Math.cos(angleDir) * speed;
+    const vy = Math.sin(angleDir) * speed;
+
+    const angle = Math.random() * 360;
+    const vangle = (Math.random() * 0.4 - 0.2); // rotation degrees per frame
+    const opacity = (Math.random() * 0.08) + 0.04; // 0.04 to 0.12 opacity
+
+    el.style.position = 'absolute';
+    el.style.width = `${size}px`;
+    el.style.height = `${size}px`;
+    el.style.left = '0';
+    el.style.top = '0';
+    el.style.color = `rgba(99, 102, 241, ${opacity})`;
+    el.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${angle}deg)`;
+
+    container.appendChild(el);
+
+    floatingObjects.push({
+      element: el,
+      x: x + radius, // center point x
+      y: y + radius, // center point y
+      vx,
+      vy,
+      radius,
+      mass: radius, // mass proportional to size
+      angle,
+      vangle
+    });
+  }
+
+  if (window.lucide) {
+    window.lucide.createIcons({
+      attrs: { 'stroke-width': 1.5 }
+    });
+  }
+
+  // Start the animation & physics frame loop
+  updatePhysics();
+}
+
+// Zero-gravity space physics engine: manages movement, wall bounds, and elastic circle collisions
+function updatePhysics() {
+  let width = window.innerWidth || 1200;
+  let height = window.innerHeight || 800;
+  if (width < 300) width = 1200;
+  if (height < 300) height = 800;
+
+  // Move objects and keep within screen boundaries
+  for (let i = 0; i < floatingObjects.length; i++) {
+    const obj = floatingObjects[i];
+
+    obj.x += obj.vx;
+    obj.y += obj.vy;
+    obj.angle += obj.vangle;
+
+    // Bounce off left/right walls
+    if (obj.x - obj.radius < 0) {
+      obj.x = obj.radius;
+      obj.vx = Math.abs(obj.vx);
+    } else if (obj.x + obj.radius > width) {
+      obj.x = width - obj.radius;
+      obj.vx = -Math.abs(obj.vx);
+    }
+
+    // Bounce off top/bottom walls
+    if (obj.y - obj.radius < 0) {
+      obj.y = obj.radius;
+      obj.vy = Math.abs(obj.vy);
+    } else if (obj.y + obj.radius > height) {
+      obj.y = height - obj.radius;
+      obj.vy = -Math.abs(obj.vy);
+    }
+  }
+
+  // Resolve elastic collisions between drifting objects
+  for (let i = 0; i < floatingObjects.length; i++) {
+    for (let j = i + 1; j < floatingObjects.length; j++) {
+      const obj1 = floatingObjects[i];
+      const obj2 = floatingObjects[j];
+
+      const dx = obj2.x - obj1.x;
+      const dy = obj2.y - obj1.y;
+      const dist = Math.hypot(dx, dy);
+      const minDist = obj1.radius + obj2.radius;
+
+      if (dist < minDist) {
+        // 1. Position correction (push overlapping items apart)
+        const overlap = minDist - dist;
+        
+        let nx = 0;
+        let ny = 0;
+        if (dist <= 0.001) {
+          // Prevent division by zero if objects spawn/arrive at the exact same location
+          const randAngle = Math.random() * Math.PI * 2;
+          nx = Math.cos(randAngle);
+          ny = Math.sin(randAngle);
+        } else {
+          nx = dx / dist;
+          ny = dy / dist;
+        }
+
+        const totalMass = obj1.mass + obj2.mass;
+        const ratio1 = obj2.mass / totalMass;
+        const ratio2 = obj1.mass / totalMass;
+
+        obj1.x -= nx * overlap * ratio1;
+        obj1.y -= ny * overlap * ratio1;
+        obj2.x += nx * overlap * ratio2;
+        obj2.y += ny * overlap * ratio2;
+
+        // 2. Elastic bounce calculation
+        const kx = obj1.vx - obj2.vx;
+        const ky = obj1.vy - obj2.vy;
+        const vn = kx * nx + ky * ny; // relative velocity along collision normal
+
+        // Bounce only if objects are moving towards each other
+        if (vn > 0) {
+          const impulse = (2 * vn) / totalMass;
+
+          obj1.vx -= impulse * obj2.mass * nx;
+          obj1.vy -= impulse * obj2.mass * ny;
+          obj2.vx += impulse * obj1.mass * nx;
+          obj2.vy += impulse * obj1.mass * ny;
+
+          // Swap a portion of rotational velocity to make collisions look tangible
+          const tempVangle = obj1.vangle;
+          obj1.vangle = obj2.vangle * 0.75 + (Math.random() * 0.08 - 0.04);
+          obj2.vangle = tempVangle * 0.75 + (Math.random() * 0.08 - 0.04);
+        }
+      }
+    }
+  }
+
+  // Render updated positions with GPU acceleration
+  for (let i = 0; i < floatingObjects.length; i++) {
+    const obj = floatingObjects[i];
+    const tx = obj.x - obj.radius;
+    const ty = obj.y - obj.radius;
+    obj.element.style.transform = `translate3d(${tx}px, ${ty}px, 0) rotate(${obj.angle}deg)`;
+  }
+
+  animFrameId = requestAnimationFrame(updatePhysics);
 }
 
 // ----------------------------------------------------
@@ -303,39 +530,47 @@ function renderLibrary() {
 function createGameCardHTML(game) {
   const ratingStars = generateStarsHTML(game.rating);
   const statusLower = (game.status || 'backlog').toLowerCase();
+  const isTrackingThisGame = activeSession && activeSession.gameId === game.id;
   
   // Format visual tag
   let formatText = game.format || 'Physical';
   let formatIcon = 'package';
-  if (formatText.includes('Steam')) formatIcon = 'steam-logo'; // Fallback to play/gamepad if custom
   if (formatText.includes('Digital')) {
     formatIcon = 'cloud';
     formatText = formatText.replace('Digital - ', '');
   }
 
+  const safeTitle = escapeHTML(game.title);
+  const safeCoverUrl = escapeHTML(game.coverUrl);
+  const safePlatform = escapeHTML(game.platform);
+  const safeStatus = escapeHTML(game.status);
+  const safeFormatText = escapeHTML(formatText);
+
   // Cover image container
   let coverHTML = '';
   if (game.coverUrl) {
-    coverHTML = `<img src="${game.coverUrl}" alt="${game.title} cover" class="game-cover-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">`;
+    coverHTML = `<img src="${safeCoverUrl}" alt="${safeTitle} cover" class="game-cover-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">`;
   }
   
   // We always build a fallback element in case image fails to load or doesn't exist
-  const initials = getInitials(game.title);
   const fallbackHTML = `
     <div class="game-cover-fallback" id="fallback-${game.id}">
       <i data-lucide="gamepad-2" class="fallback-icon"></i>
-      <span class="fallback-title">${game.title}</span>
+      <span class="fallback-title">${safeTitle}</span>
     </div>
   `;
 
   return `
-    <div class="game-card" data-id="${game.id}">
+    <div class="game-card ${isTrackingThisGame ? 'tracking-active' : ''}" data-id="${game.id}">
       <div class="game-cover-wrapper">
         ${coverHTML}
         ${fallbackHTML}
         
         <!-- Hover actions overlay -->
         <div class="game-card-actions-overlay">
+          <button class="action-circle-btn timer-btn ${isTrackingThisGame ? 'active' : ''}" data-action="timer" data-game-id="${game.id}" title="${isTrackingThisGame ? 'Pause Tracking Session' : 'Start Playtime Tracking'}">
+            <i data-lucide="${isTrackingThisGame ? 'pause' : 'play-circle'}"></i>
+          </button>
           <button class="action-circle-btn edit-btn" data-action="edit" data-game-id="${game.id}" title="Edit Game">
             <i data-lucide="edit-3"></i>
           </button>
@@ -346,25 +581,25 @@ function createGameCardHTML(game) {
 
         <!-- Badges on cover -->
         <div class="card-badges">
-          <span class="badge-status ${statusLower}">${game.status}</span>
+          <span class="badge-status ${statusLower}">${safeStatus}</span>
           <span class="badge-format">
             <i data-lucide="${formatIcon}" style="width: 10px; height: 10px;"></i>
-            <span>${formatText}</span>
+            <span>${safeFormatText}</span>
           </span>
         </div>
       </div>
 
       <div class="game-card-details">
         <div class="game-title-row">
-          <h4 title="${game.title}">${game.title}</h4>
+          <h4 title="${safeTitle}">${safeTitle}</h4>
           <div class="stars-display">
             ${ratingStars}
           </div>
         </div>
 
         <div class="game-meta-row">
-          <span class="game-platform-pill">${game.platform}</span>
-          ${game.releaseYear ? `<span class="game-release-year">${game.releaseYear}</span>` : ''}
+          <span class="game-platform-pill">${safePlatform}</span>
+          ${game.releaseYear ? `<span class="game-release-year">${escapeHTML(game.releaseYear)}</span>` : ''}
         </div>
 
         <div class="game-card-playtime">
@@ -496,10 +731,11 @@ function updateStatsUI(stats) {
       const maxCount = platformSorted[0][1];
       platformChart.innerHTML = platformSorted.map(([plat, count]) => {
         const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
+        const safePlat = escapeHTML(plat);
         return `
           <div class="chart-bar-row">
             <div class="chart-bar-info">
-              <span class="chart-bar-label">${plat}</span>
+              <span class="chart-bar-label">${safePlat}</span>
               <span class="chart-bar-value">${count} game${count === 1 ? '' : 's'}</span>
             </div>
             <div class="chart-bar-track">
@@ -519,8 +755,8 @@ function updateStatsUI(stats) {
       sidebarPlatformsList.innerHTML = `<li class="text-dark" style="font-size: 12px; padding: 4px 8px;">None added yet</li>`;
     } else {
       sidebarPlatformsList.innerHTML = platformEntries.map(([plat, count]) => `
-        <li class="sidebar-list-item" data-platform="${plat}">
-          <span>${plat}</span>
+        <li class="sidebar-list-item" data-platform="${escapeHTML(plat)}">
+          <span>${escapeHTML(plat)}</span>
           <span class="badge">${count}</span>
         </li>
       `).join('');
@@ -531,6 +767,150 @@ function updateStatsUI(stats) {
 // ----------------------------------------------------
 // PLAYTIME LIVE TIMER (MICRO-FEATURE WITH RECOVERY)
 // ----------------------------------------------------
+
+function initSessionTimer() {
+  const savedSession = localStorage.getItem('gamevault_active_session');
+  if (savedSession) {
+    try {
+      activeSession = JSON.parse(savedSession);
+      if (activeSession && activeSession.gameId) {
+        startTimerTicker();
+        const bar = document.getElementById('session-timer-bar');
+        if (bar) bar.classList.add('show');
+      }
+    } catch (e) {
+      localStorage.removeItem('gamevault_active_session');
+      activeSession = null;
+    }
+  }
+}
+
+function startPlayTimer(gameId) {
+  const game = games.find(g => g.id === gameId);
+  if (!game) return;
+
+  if (activeSession) {
+    if (activeSession.gameId === gameId) return;
+    // Auto-save previous active session before starting new one
+    savePlayTimerSession(true);
+  }
+
+  activeSession = {
+    gameId: game.id,
+    startTime: Date.now(),
+    accumulatedMs: 0
+  };
+
+  localStorage.setItem('gamevault_active_session', JSON.stringify(activeSession));
+  startTimerTicker();
+
+  const bar = document.getElementById('session-timer-bar');
+  if (bar) bar.classList.add('show');
+
+  renderLibrary();
+  showToast(`Started session tracking for "${game.title}"`, 'success');
+}
+
+function startTimerTicker() {
+  if (sessionTimerInterval) clearInterval(sessionTimerInterval);
+  updateTimerDisplay();
+  sessionTimerInterval = setInterval(updateTimerDisplay, 1000);
+}
+
+function updateTimerDisplay() {
+  if (!activeSession) return;
+
+  const game = games.find(g => g.id === activeSession.gameId);
+  const titleEl = document.getElementById('session-timer-game-title');
+  const clockEl = document.getElementById('session-timer-clock');
+
+  if (titleEl) titleEl.textContent = game ? game.title : 'Active Game';
+
+  const now = Date.now();
+  const elapsedMs = (now - activeSession.startTime) + (activeSession.accumulatedMs || 0);
+  
+  const totalSeconds = Math.floor(elapsedMs / 1000);
+  const hrs = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+
+  const pad = n => n.toString().padStart(2, '0');
+  if (clockEl) {
+    clockEl.textContent = `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
+  }
+}
+
+async function savePlayTimerSession(isAutoSave = false) {
+  if (!activeSession) return;
+
+  const now = Date.now();
+  const elapsedMs = (now - activeSession.startTime) + (activeSession.accumulatedMs || 0);
+  const gameId = activeSession.gameId;
+
+  // Stop session
+  if (sessionTimerInterval) clearInterval(sessionTimerInterval);
+  sessionTimerInterval = null;
+  localStorage.removeItem('gamevault_active_session');
+
+  const bar = document.getElementById('session-timer-bar');
+  if (bar) bar.classList.remove('show');
+
+  activeSession = null;
+
+  const game = games.find(g => g.id === gameId);
+  if (!game) {
+    renderLibrary();
+    return;
+  }
+
+  // Calculate elapsed hours (rounded to 1 decimal place, minimum 0.1h if session > 1 min)
+  let elapsedHours = elapsedMs / (1000 * 60 * 60);
+  if (elapsedHours < 0.05 && elapsedMs > 60000) {
+    elapsedHours = 0.1;
+  } else {
+    elapsedHours = Math.round(elapsedHours * 10) / 10;
+  }
+
+  if (elapsedHours > 0) {
+    const updatedPlaytime = Math.round(((game.playtime || 0) + elapsedHours) * 10) / 10;
+    const updatedGame = { ...game, playtime: updatedPlaytime };
+
+    try {
+      const res = await fetch(`/api/games/${gameId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedGame)
+      });
+
+      if (res.ok) {
+        showToast(`Saved session! Added +${formatHours(elapsedHours)} to "${game.title}"`, 'success');
+        fetchGames();
+        return;
+      }
+    } catch (err) {
+      console.error("Failed to save session playtime:", err);
+    }
+  } else {
+    if (!isAutoSave) {
+      showToast(`Session under 1 minute; no playtime added to "${game.title}".`, 'info');
+    }
+  }
+
+  renderLibrary();
+}
+
+function discardPlayTimerSession() {
+  if (sessionTimerInterval) clearInterval(sessionTimerInterval);
+  sessionTimerInterval = null;
+  localStorage.removeItem('gamevault_active_session');
+
+  const bar = document.getElementById('session-timer-bar');
+  if (bar) bar.classList.remove('show');
+
+  activeSession = null;
+  renderLibrary();
+  showToast("Session tracking discarded.", "info");
+}
 
 // ----------------------------------------------------
 // FILTERING AND DROPDOWNS POPULATION
@@ -729,7 +1109,7 @@ function setupEventListeners() {
 
   // Event delegation for dynamically rendered game cards and actions
   gamesGrid.addEventListener('click', (e) => {
-    // 1. Check if the click is on an action button (Edit / Delete)
+    // 1. Check if the click is on an action button (Edit / Delete / Timer)
     const actionBtn = e.target.closest('[data-action]');
     if (actionBtn) {
       const action = actionBtn.getAttribute('data-action');
@@ -739,6 +1119,13 @@ function setupEventListeners() {
       e.stopPropagation();
 
       switch (action) {
+        case 'timer':
+          if (activeSession && activeSession.gameId === gameId) {
+            savePlayTimerSession();
+          } else {
+            startPlayTimer(gameId);
+          }
+          break;
         case 'edit':
           openEditGameModal(gameId);
           break;
@@ -872,6 +1259,12 @@ function setupEventListeners() {
   backToLibraryBtn.addEventListener('click', () => {
     showLibraryView();
   });
+
+  // Floating Live Session Timer bar action listeners
+  const sessionSaveBtn = document.getElementById('session-save-btn');
+  const sessionDiscardBtn = document.getElementById('session-discard-btn');
+  if (sessionSaveBtn) sessionSaveBtn.addEventListener('click', () => savePlayTimerSession());
+  if (sessionDiscardBtn) sessionDiscardBtn.addEventListener('click', () => discardPlayTimerSession());
 
   // Game Details Modal close triggers
   document.getElementById('details-close-x').addEventListener('click', () => closeModal(detailsModal));
@@ -1202,9 +1595,9 @@ async function submitImportData() {
     return;
   }
 
-  // Stop timer if it's active
-  if (activeTimerId !== null) {
-    stopPlayTimer(false);
+  // Discard active timer if running before import
+  if (activeSession) {
+    discardPlayTimerSession();
   }
 
   try {
@@ -1291,12 +1684,11 @@ function openGameDetailsModal(id) {
   // Format storefront details
   let formatText = game.format || 'Physical';
   let formatIcon = 'package';
-  if (formatText.includes('Steam')) formatIcon = 'steam-logo';
   if (formatText.includes('Digital')) {
     formatIcon = 'cloud';
     formatText = formatText.replace('Digital - ', '');
   }
-  detailsFormat.innerHTML = `<i data-lucide="${formatIcon}" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 4px;"></i><span>${formatText}</span>`;
+  detailsFormat.innerHTML = `<i data-lucide="${formatIcon}" style="width: 12px; height: 12px; vertical-align: middle; margin-right: 4px;"></i><span>${escapeHTML(formatText)}</span>`;
 
   detailsPlaytime.textContent = formatHours(game.playtime);
   detailsRelease.textContent = game.releaseYear || 'N/A';
@@ -1307,7 +1699,7 @@ function openGameDetailsModal(id) {
   // Image or fallback gradient
   if (game.coverUrl) {
     detailsCoverContainer.innerHTML = `
-      <img src="${game.coverUrl}" alt="${game.title} cover" class="details-cover-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+      <img src="${escapeHTML(game.coverUrl)}" alt="${escapeHTML(game.title)} cover" class="details-cover-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
     `;
   } else {
     detailsCoverContainer.innerHTML = '';
@@ -1319,7 +1711,7 @@ function openGameDetailsModal(id) {
   fallbackHTML.id = `details-fallback-${game.id}`;
   fallbackHTML.innerHTML = `
     <i data-lucide="gamepad-2" style="width: 32px; height: 32px; opacity: 0.8; margin-bottom: 8px;"></i>
-    <span style="font-weight: 700; font-size: 13px; line-height: 1.3;">${game.title}</span>
+    <span style="font-weight: 700; font-size: 13px; line-height: 1.3;">${escapeHTML(game.title)}</span>
   `;
   detailsCoverContainer.appendChild(fallbackHTML);
 
@@ -1332,6 +1724,25 @@ function openGameDetailsModal(id) {
     const h1 = Math.abs(hash % 360);
     const h2 = (h1 + 60) % 360;
     fallbackHTML.style.background = `linear-gradient(135deg, hsl(${h1}, 45%, 15%) 0%, hsl(${h2}, 45%, 8%) 100%)`;
+  }
+
+  // Bind Track Session button
+  const trackBtn = document.getElementById('details-track-btn');
+  if (trackBtn) {
+    const isTracking = activeSession && activeSession.gameId === game.id;
+    trackBtn.innerHTML = `
+      <i data-lucide="${isTracking ? 'pause' : 'play-circle'}"></i>
+      <span>${isTracking ? 'Save Session' : 'Track Session'}</span>
+    `;
+    trackBtn.onclick = (e) => {
+      e.stopPropagation();
+      closeModal(detailsModal);
+      if (isTracking) {
+        savePlayTimerSession();
+      } else {
+        startPlayTimer(game.id);
+      }
+    };
   }
 
   // Bind footer button callbacks

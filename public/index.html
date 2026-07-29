@@ -11,6 +11,9 @@
 </head>
 <body>
 
+  <!-- Floating Background Elements -->
+  <div class="floating-bg" id="floating-bg"></div>
+
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-header">
@@ -527,6 +530,10 @@
       </div>
       
       <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="details-track-btn" style="border-color: var(--color-playing); color: var(--color-playing);">
+          <i data-lucide="play-circle"></i>
+          <span>Track Session</span>
+        </button>
         <button type="button" class="btn btn-secondary delete-btn" id="details-delete-btn" style="border-color: var(--color-abandoned); color: var(--color-abandoned);">
           <i data-lucide="trash-2"></i>
           <span>Delete Game</span>
@@ -561,6 +568,27 @@
         <button type="button" class="btn btn-secondary" id="delete-confirm-cancel-btn">Cancel</button>
         <button type="button" class="btn btn-danger" id="delete-confirm-ok-btn">Delete</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Floating Live Playtime Session Tracker Bar -->
+  <div class="session-timer-bar" id="session-timer-bar">
+    <div class="session-timer-info">
+      <div class="session-pulse-dot"></div>
+      <div class="session-timer-text">
+        <div class="session-timer-title" id="session-timer-game-title">Game Title</div>
+        <div style="font-size: 11px; color: var(--text-muted);">Session Active</div>
+      </div>
+    </div>
+    <div class="session-timer-clock" id="session-timer-clock">00:00:00</div>
+    <div class="session-timer-actions">
+      <button class="btn btn-primary btn-sm" id="session-save-btn" style="padding: 6px 14px; font-size: 12px;" title="Pause & Save Session Playtime">
+        <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+        <span>Save Session</span>
+      </button>
+      <button class="btn btn-secondary btn-sm" id="session-discard-btn" style="padding: 6px 10px; font-size: 12px;" title="Discard Session">
+        <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+      </button>
     </div>
   </div>
 
