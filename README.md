@@ -66,6 +66,19 @@ All settings are optional environment variables; copy `.env.example` to `.env` t
 
 GameVault is containerized and ready for easy server deployments. To run it, bind the local database folder as a volume to keep your collection persistent across container restarts or upgrades.
 
+**Option A — pull the published image:**
+```bash
+docker run -d \
+  -p 3000:3000 \
+  -v /my/server/gamevault-data:/app/data \
+  --name gamevault \
+  --restart unless-stopped \
+  theaob/game-collection-tracker:latest
+```
+Published automatically to [Docker Hub](https://hub.docker.com/r/theaob/game-collection-tracker) whenever `version` in `package.json` is bumped on `main` (see `.github/workflows/docker-publish.yml`); `latest` always tracks the newest release, or pin a version tag such as `:1.2.0`.
+
+**Option B — build it yourself:**
+
 1. **Build the Docker Image**:
    ```bash
    docker build -t gamevault .
@@ -97,11 +110,24 @@ game-collection-tracker/
 │   └── app.js          # REST API bindings, state manager, timer logic
 ├── .env.example        # Documented environment variables
 ├── Dockerfile          # Alpine Node container config (runs as non-root)
+├── .github/workflows/  # CI: publishes the Docker image on a version bump
 ├── .dockerignore       # dockerignore file rules
 ├── .gitignore          # Git exclusion rules
 ├── package.json        # Node app package definitions
 └── server.js           # Express API endpoints and startup manager
 ```
+
+---
+
+## 🚢 Releasing (maintainers)
+
+Bumping `version` in `package.json` and merging that to `main` is the release trigger: `.github/workflows/docker-publish.yml` builds a multi-arch (`amd64`/`arm64`) image and pushes `theaob/game-collection-tracker:<version>` and `:latest` to Docker Hub. A push to `main` that doesn't touch `package.json`, or touches it without changing `version`, does not publish.
+
+One-time setup: add two repository secrets under **Settings → Secrets and variables → Actions**:
+- `DOCKERHUB_USERNAME` — your Docker Hub username.
+- `DOCKERHUB_TOKEN` — a Docker Hub [access token](https://hub.docker.com/settings/security) (not your account password).
+
+To republish without a version bump (e.g. after fixing the secrets), run the workflow manually from the **Actions** tab (`workflow_dispatch`).
 
 ---
 
