@@ -14,7 +14,8 @@ It is built as a lightweight full-stack Node.js application that serves a respon
 - **⏱️ Live Playtime Session Tracker**: A built-in timer on game cards. Click play to start tracking, pause to stop. The active tracking session is saved in `localStorage` so it survives page reloads/refreshes.
 - **Procedural fallback covers**: If a game doesn't have a cover image URL, GameVault automatically generates a stylized, colorful gradient cover container with the game's initials.
 - **Backup & Restore**: Export your collection database as a JSON backup file and restore it by dragging & dropping files directly in the Settings panel.
-- **Secure**: Pre-configured with Helmet CSP security rules, protecting server assets and CORS endpoints.
+- **Accessible**: Full keyboard operation, visible focus rings, dialog focus trapping, screen-reader labels, and support for `prefers-reduced-motion`.
+- **Secure**: Helmet CSP rules, server-side validation of every field, escaped rendering throughout, and cross-origin access disabled by default.
 
 ---
 
@@ -48,6 +49,16 @@ It is built as a lightweight full-stack Node.js application that serves a respon
      npm start
      ```
 4. Access the web dashboard at: `http://localhost:3000`
+
+### Configuration
+
+All settings are optional environment variables; copy `.env.example` to `.env` to set them locally.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `3000` | Port the server listens on. |
+| `RAWG_API_KEY` | _(unset)_ | Enables the **Search Online** cover art and metadata lookup. Without it, the button reports that the feature is not configured. Free key at [rawg.io/apidocs](https://rawg.io/apidocs). |
+| `CORS_ORIGIN` | _(unset)_ | Comma-separated list of allowed origins, or `*`. **Leave unset unless you need it** — the API has no authentication, so enabling CORS lets any listed origin read and overwrite your collection. |
 
 ---
 
@@ -84,7 +95,8 @@ game-collection-tracker/
 │   ├── index.html      # Main HTML structure and modals
 │   ├── styles.css      # Custom design system and glassmorphism layout
 │   └── app.js          # REST API bindings, state manager, timer logic
-├── Dockerfile          # Alpine Node container config
+├── .env.example        # Documented environment variables
+├── Dockerfile          # Alpine Node container config (runs as non-root)
 ├── .dockerignore       # dockerignore file rules
 ├── .gitignore          # Git exclusion rules
 ├── package.json        # Node app package definitions
@@ -98,6 +110,7 @@ game-collection-tracker/
 - **Manual Backups**: You can download a backup at any time inside the app by clicking the **Settings** (gear) icon in the top right and clicking **Download JSON Backup**.
 - **Database Restoration**: To restore your database, open the **Settings** modal, drag and drop your exported JSON backup file, and confirm the overwrite.
 - **Portability**: Because the database is stored in a clean JSON format under `data/games.json`, you can simply copy this file to migrate your library to a new server.
+- **Crash safety**: Writes go to a temporary file that is flushed to disk and then renamed into place, so an interrupted write cannot leave a half-written `games.json`. The previous version is kept in `games.json.bak` and is restored automatically if the main file is ever unreadable.
 
 ---
 
@@ -106,7 +119,6 @@ game-collection-tracker/
 Planned features and improvement areas for upcoming releases:
 
 ### Near-Term
-- **Cover Art Auto-Fetch**: Integrate with IGDB or RAWG APIs to automatically pull cover images and metadata by game title.
 - **Wishlist Status**: Add a "Wishlist" status alongside Backlog/Playing/Completed/Abandoned to track games you plan to purchase.
 - **Tags & Custom Labels**: Allow user-defined tags (e.g., "couch co-op", "100% complete", "speedrun") for richer filtering.
 - **Genre Auto-Complete**: Pre-populated genre suggestions when adding/editing games.

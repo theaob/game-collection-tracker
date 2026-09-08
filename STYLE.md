@@ -98,7 +98,7 @@ Base utility properties include `display: inline-flex`, `font-size: 14px`, `font
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     ```
 - **Size Variations**:
-  - `.modal-small` (max-width `480px` - used for settings and delete confirmations).
+  - `.modal-small` (max-width `480px` - used for settings and confirmations).
   - `.modal-medium` (max-width `680px` - used for detailed views).
 
 ### Game Cards (`.game-card`)
@@ -114,13 +114,13 @@ Base utility properties include `display: inline-flex`, `font-size: 14px`, `font
 
 ---
 
-## 4. Custom Delete Confirmation Modal Classes
+## 4. Shared Confirmation Dialog Classes
 
-Specially tailored layout classes designed for safe confirmation of destructive processes:
+One dialog (`#confirm-modal`) backs every destructive confirmation — deleting a game and overwriting the library on import. It is driven by the promise-based `askConfirmation()` helper, so the app never falls back to `window.confirm()`.
 
-- **Wrapper (`.delete-confirm-content`)**:
-  Flex-column centering details text and highlighting identifiers.
-- **Glowing Alert Wrapper (`.delete-confirm-icon-wrapper`)**:
+- **Wrapper (`.confirm-content`)**:
+  Flex-column centering details text and highlighting identifiers. `strong` inside the message is promoted to `--text-main` to name the affected item.
+- **Glowing Alert Wrapper (`.confirm-icon-wrapper`)**:
   - Circular structure (`width: 64px`, `height: 64px`, `border-radius: 50%`).
   - Utilizes `--color-abandoned` (rose/red) color scheme with light background alpha blend, a glowing box-shadow border, and custom SVG outline size:
     ```css
@@ -129,8 +129,7 @@ Specially tailored layout classes designed for safe confirmation of destructive 
     border: 1px solid rgba(244, 63, 94, 0.25);
     box-shadow: 0 0 15px rgba(244, 63, 94, 0.15);
     ```
-- **Highlighting (`#delete-confirm-game-title`)**:
-  Strong font-weight matching main text theme.
+- **Roles**: The dialog is an `alertdialog` with `aria-modal`, labelled by its title and described by its message. Cancel carries `data-autofocus`, so the safe action is focused on open.
 
 ---
 
@@ -163,3 +162,17 @@ Media queries are declared globally to guarantee responsiveness across devices:
 - **Mobile Details Layout (`@media (max-width: 600px)`)**:
   - Card details layout collapses to single vertical columns.
   - Covers resize dynamically.
+
+---
+
+## 7. Accessibility Conventions
+
+Design decisions in this project are constrained by these rules; keep them intact when adding components.
+
+- **Focus is always visible.** A single `:focus-visible` ring (`2px solid var(--primary)`, `2px` offset) applies globally. Inputs may add their own focus border, but must never remove the ring.
+- **Anything clickable is a real control.** Status cards, sidebar platform rows, the import dropzone, rating stars, cover-search results and game cards are `<button>` elements (or carry `role="button"` plus `tabindex="0"` and Enter/Space handling). The `.status-card`, `.sidebar-list-item`, `.import-dropzone`, `.cover-search-item` and `.game-card` rules strip the user-agent button styling.
+- **Hover-revealed UI must also appear on focus.** `.game-card:focus-within .game-card-actions-overlay` mirrors the hover rule, so keyboard users can reach the per-card actions.
+- **Icon-only buttons carry `aria-label`.** `title` alone is not announced reliably.
+- **Decorative graphics are hidden.** The floating background is `aria-hidden`, cover images use `alt=""` (the title is already adjacent), and star rows are a single `role="img"` with a written rating.
+- **Motion is optional.** Everything animated is disabled under `prefers-reduced-motion: reduce`, and the background physics simulation does not even instantiate.
+- **No inline event handlers.** The Helmet CSP sets `script-src-attr 'none'`, so `onclick`/`onerror` attributes silently never fire. Bind listeners in `app.js` instead.

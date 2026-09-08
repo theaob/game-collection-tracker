@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="GameVault - a self-hosted tracker for your game collection across every platform, physical and digital.">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#07090e">
   <title>GameVault - Self-Hosted Game Collection Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236366f1'/%3E%3Cpath d='M10 12h12a5 5 0 0 1 5 5 4 4 0 0 1-7 2.6H12A4 4 0 0 1 5 17a5 5 0 0 1 5-5Z' fill='%23fff'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -11,8 +15,10 @@
 </head>
 <body>
 
-  <!-- Floating Background Elements -->
-  <div class="floating-bg" id="floating-bg"></div>
+  <a class="skip-link" href="#library-section">Skip to library</a>
+
+  <!-- Floating Background Elements (decorative) -->
+  <div class="floating-bg" id="floating-bg" aria-hidden="true"></div>
 
   <!-- Sidebar -->
   <aside class="sidebar">
@@ -23,8 +29,8 @@
       </div>
     </div>
     
-    <nav class="sidebar-nav">
-      <a href="#" class="nav-item active" id="nav-all">
+    <nav class="sidebar-nav" aria-label="Views">
+      <a href="#" class="nav-item active" id="nav-all" aria-current="page">
         <i data-lucide="library"></i>
         <span>Library</span>
       </a>
@@ -62,17 +68,18 @@
     <header class="header">
       <div class="search-container">
         <i data-lucide="search" class="search-icon"></i>
-        <input type="text" id="search-input" placeholder="Search games by title, genre, notes...">
-        <button id="search-clear-btn" class="clear-btn" style="display: none;">
+        <label class="sr-only" for="search-input">Search your collection</label>
+        <input type="search" id="search-input" placeholder="Search games by title, genre, notes..." autocomplete="off">
+        <button type="button" id="search-clear-btn" class="clear-btn" style="display: none;" aria-label="Clear search">
           <i data-lucide="x"></i>
         </button>
       </div>
       
       <div class="header-actions">
-        <button class="btn btn-secondary icon-btn" id="settings-btn" title="Backup & Settings">
+        <button type="button" class="btn btn-secondary icon-btn" id="settings-btn" title="Backup &amp; Settings" aria-label="Backup and settings">
           <i data-lucide="settings"></i>
         </button>
-        <button class="btn btn-primary" id="add-game-btn">
+        <button type="button" class="btn btn-primary" id="add-game-btn">
           <i data-lucide="plus"></i>
           <span>Add Game</span>
         </button>
@@ -84,7 +91,7 @@
       
       <!-- Stats / Dashboard Row -->
       <section class="dashboard-stats-grid" id="stats-dashboard">
-        <div class="status-card backlog" data-filter-status="Backlog">
+        <button type="button" class="status-card backlog" data-filter-status="Backlog" aria-pressed="false" aria-label="Filter library by Backlog">
           <div class="status-card-inner">
             <div class="status-info">
               <span class="status-label">Backlog</span>
@@ -95,9 +102,9 @@
             </div>
           </div>
           <div class="status-card-progress"></div>
-        </div>
+        </button>
 
-        <div class="status-card playing" data-filter-status="Playing">
+        <button type="button" class="status-card playing" data-filter-status="Playing" aria-pressed="false" aria-label="Filter library by Now Playing">
           <div class="status-card-inner">
             <div class="status-info">
               <span class="status-label">Now Playing</span>
@@ -108,9 +115,9 @@
             </div>
           </div>
           <div class="status-card-progress"></div>
-        </div>
+        </button>
 
-        <div class="status-card completed" data-filter-status="Completed">
+        <button type="button" class="status-card completed" data-filter-status="Completed" aria-pressed="false" aria-label="Filter library by Completed">
           <div class="status-card-inner">
             <div class="status-info">
               <span class="status-label">Completed</span>
@@ -121,9 +128,9 @@
             </div>
           </div>
           <div class="status-card-progress"></div>
-        </div>
+        </button>
 
-        <div class="status-card abandoned" data-filter-status="Abandoned">
+        <button type="button" class="status-card abandoned" data-filter-status="Abandoned" aria-pressed="false" aria-label="Filter library by Abandoned">
           <div class="status-card-inner">
             <div class="status-info">
               <span class="status-label">Abandoned</span>
@@ -134,7 +141,7 @@
             </div>
           </div>
           <div class="status-card-progress"></div>
-        </div>
+        </button>
       </section>
 
       <!-- Library Filtering & Controls Header -->
@@ -182,10 +189,10 @@
           </div>
 
           <div class="view-toggle-container">
-            <button id="view-grid-btn" class="toggle-btn active" title="Grid View">
+            <button type="button" id="view-grid-btn" class="toggle-btn active" title="Grid view" aria-label="Grid view" aria-pressed="true">
               <i data-lucide="layout-grid"></i>
             </button>
-            <button id="view-list-btn" class="toggle-btn" title="List View">
+            <button type="button" id="view-list-btn" class="toggle-btn" title="List view" aria-label="List view" aria-pressed="false">
               <i data-lucide="list"></i>
             </button>
           </div>
@@ -198,7 +205,7 @@
         <div class="filter-tags" id="filter-tags-list">
           <!-- Tags go here -->
         </div>
-        <button class="clear-filters-btn" id="clear-all-filters">Clear All</button>
+        <button type="button" class="clear-filters-btn" id="clear-all-filters">Clear All</button>
       </section>
 
       <!-- Analysis / Analytics View (Hidden by Default) -->
@@ -287,7 +294,7 @@
       </section>
 
       <!-- Games Grid Container -->
-      <section class="games-catalog-container" id="library-section">
+      <section class="games-catalog-container" id="library-section" tabindex="-1">
         <div id="games-grid" class="games-grid">
           <!-- Game cards will be injected here dynamically -->
         </div>
@@ -299,7 +306,7 @@
           </div>
           <h3>No games found</h3>
           <p>We couldn't find any games matching your search criteria or filters. Try adjusting your settings, or add a new game.</p>
-          <button class="btn btn-primary" id="empty-state-add-btn">Add New Game</button>
+          <button type="button" class="btn btn-primary" id="empty-state-add-btn" data-action="add-game"><span>Add New Game</span></button>
         </div>
       </section>
 
@@ -307,16 +314,16 @@
   </main>
 
   <!-- Add/Edit Game Modal -->
-  <div class="modal-backdrop" id="game-modal" style="display: none;">
+  <div class="modal-backdrop" id="game-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-hidden="true">
     <div class="modal-card">
       <div class="modal-header">
         <h3 id="modal-title">Add New Game</h3>
-        <button class="modal-close-btn" id="modal-close-x">
+        <button type="button" class="modal-close-btn" id="modal-close-x" aria-label="Close dialog">
           <i data-lucide="x"></i>
         </button>
       </div>
       
-      <form id="game-form" onsubmit="return false;">
+      <form id="game-form">
         <input type="hidden" id="game-id-input">
         
         <div class="modal-body">
@@ -324,13 +331,13 @@
             <div class="form-group col-12">
               <label for="game-title">Game Title *</label>
               <div class="title-search-input-group">
-                <input type="text" id="game-title" class="form-control" required placeholder="e.g. Elden Ring, Persona 5 Royal">
-                <button type="button" class="btn btn-secondary" id="fetch-cover-btn" title="Search online metadata and cover art">
+                <input type="text" id="game-title" class="form-control" required placeholder="e.g. Elden Ring, Persona 5 Royal" data-autofocus>
+                <button type="button" class="btn btn-secondary" id="fetch-cover-btn" title="Search online metadata and cover art" aria-controls="cover-search-results">
                   <i data-lucide="search-code"></i>
                   <span>Search Online</span>
                 </button>
               </div>
-              <div class="cover-search-results" id="cover-search-results" style="display: none;"></div>
+              <div class="cover-search-results" id="cover-search-results" style="display: none;" role="listbox" aria-label="Online search results"></div>
             </div>
           </div>
 
@@ -387,13 +394,13 @@
 
           <div class="form-row">
             <div class="form-group col-6">
-              <label>Rating</label>
-              <div class="rating-stars-input" id="rating-stars-container">
-                <span class="star-wrapper" data-value="1"><i data-lucide="star"></i></span>
-                <span class="star-wrapper" data-value="2"><i data-lucide="star"></i></span>
-                <span class="star-wrapper" data-value="3"><i data-lucide="star"></i></span>
-                <span class="star-wrapper" data-value="4"><i data-lucide="star"></i></span>
-                <span class="star-wrapper" data-value="5"><i data-lucide="star"></i></span>
+              <span class="form-label" id="rating-label">Rating</span>
+              <div class="rating-stars-input" id="rating-stars-container" role="radiogroup" aria-labelledby="rating-label">
+                <button type="button" class="star-wrapper" data-value="1" role="radio" aria-checked="false" aria-label="1 star"><i data-lucide="star"></i></button>
+                <button type="button" class="star-wrapper" data-value="2" role="radio" aria-checked="false" aria-label="2 stars"><i data-lucide="star"></i></button>
+                <button type="button" class="star-wrapper" data-value="3" role="radio" aria-checked="false" aria-label="3 stars"><i data-lucide="star"></i></button>
+                <button type="button" class="star-wrapper" data-value="4" role="radio" aria-checked="false" aria-label="4 stars"><i data-lucide="star"></i></button>
+                <button type="button" class="star-wrapper" data-value="5" role="radio" aria-checked="false" aria-label="5 stars"><i data-lucide="star"></i></button>
               </div>
               <input type="hidden" id="game-rating" value="0">
             </div>
@@ -433,11 +440,11 @@
   </div>
 
   <!-- Settings / Backup Modal -->
-  <div class="modal-backdrop" id="settings-modal" style="display: none;">
+  <div class="modal-backdrop" id="settings-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" aria-hidden="true">
     <div class="modal-card modal-small">
       <div class="modal-header">
-        <h3>Backup & Settings</h3>
-        <button class="modal-close-btn" id="settings-close-x">
+        <h3 id="settings-modal-title">Backup &amp; Settings</h3>
+        <button type="button" class="modal-close-btn" id="settings-close-x" aria-label="Close dialog">
           <i data-lucide="x"></i>
         </button>
       </div>
@@ -446,7 +453,7 @@
         <div class="settings-section">
           <h4>Export Library</h4>
           <p class="settings-desc">Download a backup of your entire library as a single JSON file. You can restore this backup at any time on this or another deployment.</p>
-          <a href="/api/export" download class="btn btn-secondary w-100 text-center flex-center">
+          <a href="/api/export" download class="btn btn-secondary w-100 text-center flex-center" data-autofocus>
             <i data-lucide="download"></i>
             <span>Download JSON Backup</span>
           </a>
@@ -458,18 +465,18 @@
           <h4>Import Library</h4>
           <p class="settings-desc">Upload a previously exported JSON backup file. <span class="text-rose font-semibold">WARNING: This will completely replace your current database!</span></p>
           
-          <div class="import-dropzone" id="import-dropzone">
+          <button type="button" class="import-dropzone" id="import-dropzone">
             <i data-lucide="upload-cloud"></i>
             <span class="dropzone-text">Click to select file or drag & drop</span>
-            <input type="file" id="import-file-input" accept=".json" style="display:none;">
-          </div>
+          </button>
+          <input type="file" id="import-file-input" accept=".json,application/json" style="display:none;">
           <div id="import-filename" class="import-filename-display" style="display:none;">
             <i data-lucide="file-json"></i>
             <span id="import-filename-text">backup.json</span>
-            <button id="remove-import-file-btn" class="clear-btn"><i data-lucide="x"></i></button>
+            <button type="button" id="remove-import-file-btn" class="clear-btn" aria-label="Remove selected file"><i data-lucide="x"></i></button>
           </div>
           
-          <button class="btn btn-primary w-100 mt-3" id="import-submit-btn" disabled>
+          <button type="button" class="btn btn-primary w-100 mt-3" id="import-submit-btn" disabled>
             <i data-lucide="refresh-cw"></i>
             <span>Confirm Import & Overwrite</span>
           </button>
@@ -479,11 +486,11 @@
   </div>
 
   <!-- Game Details Modal -->
-  <div class="modal-backdrop" id="details-modal" style="display: none;">
+  <div class="modal-backdrop" id="details-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="details-title" aria-hidden="true">
     <div class="modal-card modal-medium">
       <div class="modal-header">
         <h3>Game Details</h3>
-        <button class="modal-close-btn" id="details-close-x" title="Close details">
+        <button type="button" class="modal-close-btn" id="details-close-x" title="Close details" aria-label="Close details">
           <i data-lucide="x"></i>
         </button>
       </div>
@@ -530,11 +537,11 @@
       </div>
       
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="details-track-btn" style="border-color: var(--color-playing); color: var(--color-playing);">
+        <button type="button" class="btn btn-secondary btn-outline-playing" id="details-track-btn">
           <i data-lucide="play-circle"></i>
           <span>Track Session</span>
         </button>
-        <button type="button" class="btn btn-secondary delete-btn" id="details-delete-btn" style="border-color: var(--color-abandoned); color: var(--color-abandoned);">
+        <button type="button" class="btn btn-secondary btn-outline-danger" id="details-delete-btn">
           <i data-lucide="trash-2"></i>
           <span>Delete Game</span>
         </button>
@@ -547,53 +554,53 @@
     </div>
   </div>
 
-  <!-- Delete Confirmation Modal -->
-  <div class="modal-backdrop" id="delete-confirm-modal" style="display: none;">
+  <!-- Shared Confirmation Dialog (delete, destructive import) -->
+  <div class="modal-backdrop" id="confirm-modal" style="display: none;" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-message" aria-hidden="true">
     <div class="modal-card modal-small">
       <div class="modal-header">
-        <h3>Confirm Delete</h3>
-        <button class="modal-close-btn" id="delete-confirm-close-x" title="Close confirmation">
+        <h3 id="confirm-modal-title">Confirm</h3>
+        <button type="button" class="modal-close-btn" id="confirm-modal-close-x" aria-label="Cancel">
           <i data-lucide="x"></i>
         </button>
       </div>
       <div class="modal-body">
-        <div class="delete-confirm-content">
-          <div class="delete-confirm-icon-wrapper">
+        <div class="confirm-content">
+          <div class="confirm-icon-wrapper">
             <i data-lucide="alert-triangle"></i>
           </div>
-          <p>Are you sure you want to delete <strong id="delete-confirm-game-title"></strong>? This action cannot be undone.</p>
+          <p id="confirm-modal-message"></p>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="delete-confirm-cancel-btn">Cancel</button>
-        <button type="button" class="btn btn-danger" id="delete-confirm-ok-btn">Delete</button>
+        <button type="button" class="btn btn-secondary" id="confirm-modal-cancel-btn" data-autofocus>Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-modal-ok-btn">Confirm</button>
       </div>
     </div>
   </div>
 
   <!-- Floating Live Playtime Session Tracker Bar -->
-  <div class="session-timer-bar" id="session-timer-bar">
+  <div class="session-timer-bar" id="session-timer-bar" role="status" aria-live="polite">
     <div class="session-timer-info">
       <div class="session-pulse-dot"></div>
       <div class="session-timer-text">
         <div class="session-timer-title" id="session-timer-game-title">Game Title</div>
-        <div style="font-size: 11px; color: var(--text-muted);">Session Active</div>
+        <div class="session-timer-subtitle">Session active</div>
       </div>
     </div>
     <div class="session-timer-clock" id="session-timer-clock">00:00:00</div>
     <div class="session-timer-actions">
-      <button class="btn btn-primary btn-sm" id="session-save-btn" style="padding: 6px 14px; font-size: 12px;" title="Pause & Save Session Playtime">
-        <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+      <button type="button" class="btn btn-primary btn-sm" id="session-save-btn" title="Pause and save session playtime">
+        <i data-lucide="check"></i>
         <span>Save Session</span>
       </button>
-      <button class="btn btn-secondary btn-sm" id="session-discard-btn" style="padding: 6px 10px; font-size: 12px;" title="Discard Session">
-        <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+      <button type="button" class="btn btn-secondary btn-sm btn-icon-only" id="session-discard-btn" title="Discard session" aria-label="Discard session">
+        <i data-lucide="x"></i>
       </button>
     </div>
   </div>
 
   <!-- Toast Notification System -->
-  <div class="toast-container" id="toast-container"></div>
+  <div class="toast-container" id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
 
   <!-- Load Lucide Icons CDN -->
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.400.0/dist/umd/lucide.min.js"></script>

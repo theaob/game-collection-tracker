@@ -10,12 +10,16 @@ let activeFilters = {
 };
 let sortBy = 'added-desc';
 let viewMode = 'grid'; // 'grid' or 'list'
+let hasLoadedGames = false; // guards the skeleton placeholders
+let loadFailed = false;     // distinguishes "empty library" from "could not load"
 
 // Session Timer State
 let activeSession = null; // { gameId, startTime, accumulatedMs }
 let sessionTimerInterval = null;
 
-// HTML Escaping Utility for XSS Prevention
+// HTML Escaping Utility for XSS Prevention.
+// Every value that reaches an innerHTML sink must pass through this, including
+// data echoed back by the API and results from the third-party cover search.
 function escapeHTML(str) {
   if (str === null || str === undefined) return '';
   return String(str)
@@ -24,6 +28,38 @@ function escapeHTML(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+// Only absolute http(s) URLs are allowed into image src attributes
+function safeImageURL(url) {
+  if (typeof url !== 'string') return '';
+  return /^https?:\/\//i.test(url.trim()) ? escapeHTML(url.trim()) : '';
+}
+
+function debounce(fn, wait) {
+  let timeoutId = null;
+  return (...args) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), wait);
+  };
+}
+
+const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+// Procedural cover colours derived from the title, so a game without cover art
+// still gets a stable, distinctive gradient.
+function coverGradient(title) {
+  let hash = 0;
+  const text = title || '';
+  for (let i = 0; i < text.length; i++) {
+    hash = text.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const h1 = Math.abs(hash % 360);
+  const h2 = (h1 + 60) % 360;
+  return {
+    background: `linear-gradient(135deg, hsl(${h1}, 45%, 15%) 0%, hsl(${h2}, 45%, 8%) 100%)`,
+    accent: `hsl(${h1}, 70%, 65%)`
+  };
 }
 
 // Details Modal Elements
@@ -76,9 +112,6 @@ const settingsModal = document.getElementById('settings-modal');
 const settingsBtn = document.getElementById('settings-btn');
 const settingsCloseX = document.getElementById('settings-close-x');
 
-// Delete Confirmation Modal
-const deleteConfirmModal = document.getElementById('delete-confirm-modal');
-let gameIdToDelete = null;
 const importDropzone = document.getElementById('import-dropzone');
 const importFileInput = document.getElementById('import-file-input');
 const importFilenameDisplay = document.getElementById('import-filename');
@@ -108,15 +141,21 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initApp() {
+  // Restore persisted UI preferences before the first render
+  const savedViewMode = localStorage.getItem('gamevault_view_mode');
+  if (savedViewMode === 'grid' || savedViewMode === 'list') {
+    viewMode = savedViewMode;
+  }
+  updateViewModeButtons();
+
+  const savedSortBy = localStorage.getItem('gamevault_sort_by');
+  if (savedSortBy && Array.from(sortBySelect.options).some(o => o.value === savedSortBy)) {
+    sortBy = savedSortBy;
+    sortBySelect.value = savedSortBy;
+  }
+
   // Fetch initial games database
   fetchGames();
-
-  // Load view mode preference
-  const savedViewMode = localStorage.getItem('gamevault_view_mode');
-  if (savedViewMode) {
-    viewMode = savedViewMode;
-    updateViewModeButtons();
-  }
 
   // Setup Event Listeners
   setupEventListeners();
@@ -124,9 +163,10 @@ function initApp() {
   // Restore live session timer if saved in localStorage
   initSessionTimer();
   
-  // Initialize background floating elements
+  // Initialize background floating elements, and react to a motion-preference change
   initFloatingBackground();
-  
+  reducedMotionQuery.addEventListener('change', initFloatingBackground);
+
   // Initial Lucide Icons compilation
   if (window.lucide) {
     window.lucide.createIcons();
@@ -147,7 +187,12 @@ function initFloatingBackground() {
   floatingObjects = [];
   if (animFrameId) {
     cancelAnimationFrame(animFrameId);
+    animFrameId = null;
   }
+
+  // A screenful of drifting, colliding icons is exactly the kind of motion
+  // "reduce motion" asks us to drop.
+  if (reducedMotionQuery.matches) return;
 
   const icons = [
     'gamepad-2', 'swords', 'trophy', 'shield', 'star',
@@ -344,22 +389,41 @@ function updatePhysics() {
 // ----------------------------------------------------
 
 async function fetchGames() {
+  showLibraryLoading();
   try {
     const res = await fetch('/api/games');
     if (!res.ok) throw new Error("Failed to fetch games database.");
-    games = await res.json();
-    
+    const payload = await res.json();
+    if (!Array.isArray(payload)) throw new Error("Unexpected response from the games API.");
+    games = payload;
+    hasLoadedGames = true;
+    loadFailed = false;
+
     // Extract unique platforms to populate drop-downs
     populatePlatformDropdowns();
-    
+
     // Refresh library render
     renderLibrary();
-    
+
     // Refresh stats panel & sidebar counters
     fetchStats();
   } catch (error) {
+    hasLoadedGames = true;
+    loadFailed = true;
+    renderLibrary();
     showToast(error.message, 'error');
   }
+}
+
+// Skeleton placeholders while the collection is in flight
+function showLibraryLoading() {
+  if (hasLoadedGames) return;
+  emptyState.style.display = 'none';
+  gamesGrid.style.display = 'grid';
+  gamesGrid.innerHTML = Array.from({ length: 8 })
+    .map(() => `<div class="game-card-skeleton" aria-hidden="true"></div>`)
+    .join('');
+  gamesGrid.setAttribute('aria-busy', 'true');
 }
 
 async function fetchStats() {
@@ -400,23 +464,18 @@ async function saveGame(gameData) {
   }
 }
 
-function deleteGame(id) {
+async function deleteGame(id) {
   const game = games.find(g => g.id === id);
   if (!game) return;
 
-  gameIdToDelete = id;
-  document.getElementById('delete-confirm-game-title').textContent = `"${game.title}"`;
-  openModal(deleteConfirmModal);
-}
+  const confirmed = await askConfirmation({
+    title: 'Delete game',
+    message: `Are you sure you want to delete <strong>${escapeHTML(game.title)}</strong>? This action cannot be undone.`,
+    confirmLabel: 'Delete'
+  });
+  if (!confirmed) return;
 
-async function confirmDeleteGame() {
-  if (!gameIdToDelete) return;
-  const id = gameIdToDelete;
-  const game = games.find(g => g.id === id);
-  const title = game ? game.title : 'this game';
-
-  closeModal(deleteConfirmModal);
-  gameIdToDelete = null;
+  const title = game.title;
 
   try {
     const res = await fetch(`/api/games/${id}`, { method: 'DELETE' });
@@ -469,22 +528,24 @@ function renderLibrary() {
     return true;
   });
 
-  // Apply Sorting
+  // Apply Sorting. Numeric sorts fall back to title so equal values (a shelf
+  // full of unplayed, unrated backlog games) still come out in a stable order.
+  const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '');
   filtered.sort((a, b) => {
     if (sortBy === 'title-asc') {
-      return a.title.localeCompare(b.title);
+      return byTitle(a, b);
     } else if (sortBy === 'title-desc') {
-      return b.title.localeCompare(a.title);
+      return byTitle(b, a);
     } else if (sortBy === 'playtime-desc') {
-      return (b.playtime || 0) - (a.playtime || 0);
+      return ((b.playtime || 0) - (a.playtime || 0)) || byTitle(a, b);
     } else if (sortBy === 'rating-desc') {
-      return (b.rating || 0) - (a.rating || 0);
+      return ((b.rating || 0) - (a.rating || 0)) || byTitle(a, b);
     } else if (sortBy === 'release-desc') {
-      return (b.releaseYear || 0) - (a.releaseYear || 0);
+      return ((b.releaseYear || 0) - (a.releaseYear || 0)) || byTitle(a, b);
     } else if (sortBy === 'added-asc') {
-      return new Date(a.addedAt || 0) - new Date(b.addedAt || 0);
+      return (new Date(a.addedAt || 0) - new Date(b.addedAt || 0)) || byTitle(a, b);
     } else { // 'added-desc' (default)
-      return new Date(b.addedAt || 0) - new Date(a.addedAt || 0);
+      return (new Date(b.addedAt || 0) - new Date(a.addedAt || 0)) || byTitle(a, b);
     }
   });
 
@@ -500,35 +561,62 @@ function renderLibrary() {
   libraryCurrentView.textContent = filterText;
 
   // Toggle empty states
+  gamesGrid.removeAttribute('aria-busy');
   if (filtered.length === 0) {
+    gamesGrid.innerHTML = ''; // drop the previous result set from the DOM
     gamesGrid.style.display = 'none';
     emptyState.style.display = 'flex';
+    renderEmptyState();
   } else {
     gamesGrid.style.display = 'grid';
     emptyState.style.display = 'none';
-    
+
     // Generate Cards
     gamesGrid.innerHTML = filtered.map(game => createGameCardHTML(game)).join('');
-    
+
     // Compile Lucide icons on newly added nodes
     if (window.lucide) {
       window.lucide.createIcons();
     }
-    
-    // Attach dynamically calculated inline colors for fallback cover gradients
-    filtered.forEach(game => {
-      if (!game.coverUrl) {
-        applyFallbackGradient(game.id, game.title);
-      }
-    });
   }
 
   // Update active filter tags display
   renderFilterTags();
 }
 
+// The empty state means two very different things: a brand new library, or a
+// filter combination with no matches. Say which.
+function renderEmptyState() {
+  const hasFilters = activeFilters.search !== '' ||
+    activeFilters.status !== 'All' ||
+    activeFilters.platform !== 'All' ||
+    activeFilters.format !== 'All';
+
+  const heading = emptyState.querySelector('h3');
+  const body = emptyState.querySelector('p');
+  const actionBtn = emptyState.querySelector('#empty-state-add-btn');
+
+  if (loadFailed) {
+    // Never imply the collection is gone when the request simply failed
+    heading.textContent = "Couldn't load your collection";
+    body.textContent = "The server did not return your library. Your data is still on disk — check that the server is running, then try again.";
+    actionBtn.querySelector('span').textContent = 'Retry';
+    actionBtn.dataset.action = 'retry';
+  } else if (games.length > 0 && hasFilters) {
+    heading.textContent = 'No games match these filters';
+    body.textContent = "Nothing in your collection matches the current search and filters. Try widening them, or clear them to see everything again.";
+    actionBtn.querySelector('span').textContent = 'Clear Filters';
+    actionBtn.dataset.action = 'clear-filters';
+  } else {
+    heading.textContent = 'Your library is empty';
+    body.textContent = "Add your first game to start tracking your backlog, playtime and completions across every platform you own.";
+    actionBtn.querySelector('span').textContent = 'Add New Game';
+    actionBtn.dataset.action = 'add-game';
+  }
+}
+
 function createGameCardHTML(game) {
-  const ratingStars = generateStarsHTML(game.rating);
+  const ratingStars = renderStarsBlock(game.rating);
   const statusLower = (game.status || 'backlog').toLowerCase();
   const isTrackingThisGame = activeSession && activeSession.gameId === game.id;
   
@@ -541,40 +629,43 @@ function createGameCardHTML(game) {
   }
 
   const safeTitle = escapeHTML(game.title);
-  const safeCoverUrl = escapeHTML(game.coverUrl);
+  const safeCoverUrl = safeImageURL(game.coverUrl);
   const safePlatform = escapeHTML(game.platform);
   const safeStatus = escapeHTML(game.status);
   const safeFormatText = escapeHTML(formatText);
+  const safeId = escapeHTML(game.id);
+  const gradient = coverGradient(game.title);
 
   // Cover image container
   let coverHTML = '';
-  if (game.coverUrl) {
-    coverHTML = `<img src="${safeCoverUrl}" alt="${safeTitle} cover" class="game-cover-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">`;
+  if (safeCoverUrl) {
+    coverHTML = `<img src="${safeCoverUrl}" alt="" class="game-cover-img" loading="lazy" data-cover-img>`;
   }
-  
-  // We always build a fallback element in case image fails to load or doesn't exist
+
+  // The fallback always sits underneath the cover, so a broken image URL simply
+  // reveals the procedural gradient instead of leaving a blank tile.
   const fallbackHTML = `
-    <div class="game-cover-fallback" id="fallback-${game.id}">
-      <i data-lucide="gamepad-2" class="fallback-icon"></i>
+    <div class="game-cover-fallback" style="background: ${gradient.background};">
+      <i data-lucide="gamepad-2" class="fallback-icon" style="color: ${gradient.accent};"></i>
       <span class="fallback-title">${safeTitle}</span>
     </div>
   `;
 
   return `
-    <div class="game-card ${isTrackingThisGame ? 'tracking-active' : ''}" data-id="${game.id}">
+    <article class="game-card ${isTrackingThisGame ? 'tracking-active' : ''}" data-id="${safeId}" tabindex="0" role="button" aria-label="${safeTitle} — view details">
       <div class="game-cover-wrapper">
         ${coverHTML}
         ${fallbackHTML}
-        
+
         <!-- Hover actions overlay -->
         <div class="game-card-actions-overlay">
-          <button class="action-circle-btn timer-btn ${isTrackingThisGame ? 'active' : ''}" data-action="timer" data-game-id="${game.id}" title="${isTrackingThisGame ? 'Pause Tracking Session' : 'Start Playtime Tracking'}">
+          <button type="button" class="action-circle-btn timer-btn ${isTrackingThisGame ? 'active' : ''}" data-action="timer" data-game-id="${safeId}" title="${isTrackingThisGame ? 'Save tracking session' : 'Start playtime tracking'}" aria-label="${isTrackingThisGame ? 'Save tracking session for' : 'Start playtime tracking for'} ${safeTitle}">
             <i data-lucide="${isTrackingThisGame ? 'pause' : 'play-circle'}"></i>
           </button>
-          <button class="action-circle-btn edit-btn" data-action="edit" data-game-id="${game.id}" title="Edit Game">
+          <button type="button" class="action-circle-btn edit-btn" data-action="edit" data-game-id="${safeId}" title="Edit game" aria-label="Edit ${safeTitle}">
             <i data-lucide="edit-3"></i>
           </button>
-          <button class="action-circle-btn delete-btn" data-action="delete" data-game-id="${game.id}" title="Delete Game">
+          <button type="button" class="action-circle-btn delete-btn" data-action="delete" data-game-id="${safeId}" title="Delete game" aria-label="Delete ${safeTitle}">
             <i data-lucide="trash-2"></i>
           </button>
         </div>
@@ -592,12 +683,12 @@ function createGameCardHTML(game) {
       <div class="game-card-details">
         <div class="game-title-row">
           <h4 title="${safeTitle}">${safeTitle}</h4>
-          <div class="stars-display">
-            ${ratingStars}
-          </div>
+          ${ratingStars}
         </div>
 
         <div class="game-meta-row">
+          <!-- The cover badge is hidden in list view, where this one takes over -->
+          <span class="badge-status badge-status-inline ${statusLower}">${safeStatus}</span>
           <span class="game-platform-pill">${safePlatform}</span>
           ${game.releaseYear ? `<span class="game-release-year">${escapeHTML(game.releaseYear)}</span>` : ''}
         </div>
@@ -609,7 +700,7 @@ function createGameCardHTML(game) {
           </div>
         </div>
       </div>
-    </div>
+    </article>
   `;
 }
 
@@ -621,36 +712,11 @@ function generateStarsHTML(rating) {
   return stars;
 }
 
-function getInitials(title) {
-  if (!title) return "G";
-  const words = title.trim().split(/\s+/);
-  if (words.length === 1) return words[0].substring(0, 2).toUpperCase();
-  return (words[0][0] + words[1][0]).toUpperCase();
-}
-
-// Applies a beautiful procedural color gradient based on string hashing
-function applyFallbackGradient(elementId, title) {
-  const fallbackEl = document.getElementById(`fallback-${elementId}`);
-  if (!fallbackEl) return;
-
-  // Simple string hash
-  let hash = 0;
-  for (let i = 0; i < title.length; i++) {
-    hash = title.charCodeAt(i) + ((hash << 5) - hash);
-  }
-
-  // Generate 2 rich colors based on hash
-  const h1 = Math.abs(hash % 360);
-  const h2 = (h1 + 60) % 360;
-  
-  fallbackEl.style.background = `linear-gradient(135deg, hsl(${h1}, 45%, 15%) 0%, hsl(${h2}, 45%, 8%) 100%)`;
-  
-  // Customize icon colors slightly
-  const icon = fallbackEl.querySelector('.fallback-icon');
-  if (icon) {
-    icon.style.color = `hsl(${h1}, 70%, 65%)`;
-    icon.style.opacity = '0.9';
-  }
+// Star icons are decorative; the rating is announced through the label instead
+function renderStarsBlock(rating) {
+  const value = rating || 0;
+  const label = value > 0 ? `Rated ${value} out of 5` : 'Not rated yet';
+  return `<div class="stars-display" role="img" aria-label="${label}">${generateStarsHTML(value)}</div>`;
 }
 
 // ----------------------------------------------------
@@ -675,18 +741,10 @@ function updateStatsUI(stats) {
   const totalHoursVal = document.getElementById('stats-total-hours');
   if (totalHoursVal) totalHoursVal.textContent = `${Math.round(stats.totalPlaytime)}h`;
 
-  // Calculate Average Rating
-  let ratedGamesCount = 0;
-  let totalRatingSum = 0;
-  games.forEach(g => {
-    if (g.rating > 0) {
-      ratedGamesCount++;
-      totalRatingSum += g.rating;
-    }
-  });
+  // Average Rating (computed server-side over the games that carry a rating)
   const avgRatingVal = document.getElementById('stats-average-rating');
   if (avgRatingVal) {
-    avgRatingVal.textContent = ratedGamesCount > 0 ? (totalRatingSum / ratedGamesCount).toFixed(1) : '0.0';
+    avgRatingVal.textContent = (stats.averageRating || 0).toFixed(1);
   }
 
   // Format Breakdown visualization
@@ -755,9 +813,11 @@ function updateStatsUI(stats) {
       sidebarPlatformsList.innerHTML = `<li class="text-dark" style="font-size: 12px; padding: 4px 8px;">None added yet</li>`;
     } else {
       sidebarPlatformsList.innerHTML = platformEntries.map(([plat, count]) => `
-        <li class="sidebar-list-item" data-platform="${escapeHTML(plat)}">
-          <span>${escapeHTML(plat)}</span>
-          <span class="badge">${count}</span>
+        <li>
+          <button type="button" class="sidebar-list-item" data-platform="${escapeHTML(plat)}" aria-label="Show only ${escapeHTML(plat)} games">
+            <span>${escapeHTML(plat)}</span>
+            <span class="badge">${count}</span>
+          </button>
         </li>
       `).join('');
     }
@@ -924,17 +984,26 @@ function populatePlatformDropdowns() {
   const presets = ["PC", "Nintendo Switch", "PlayStation 5", "PlayStation 4", "Xbox Series X/S", "Xbox One", "Retro"];
   const combinedPlatforms = Array.from(new Set([...presets, ...currentPlatforms])).sort();
 
+  // Platform names are user-supplied, so they are escaped before reaching innerHTML
+  const optionsHTML = combinedPlatforms
+    .map(plat => `<option value="${escapeHTML(plat)}">${escapeHTML(plat)}</option>`)
+    .join('');
+
   // Populate Filter Platforms Dropdown
   const filterVal = filterPlatform.value;
-  filterPlatform.innerHTML = `<option value="All">All Platforms</option>` + 
-    combinedPlatforms.map(plat => `<option value="${plat}">${plat}</option>`).join('');
-  filterPlatform.value = filterVal; // Restore selected filter platform
+  filterPlatform.innerHTML = `<option value="All">All Platforms</option>${optionsHTML}`;
+  filterPlatform.value = filterVal;
+  if (!filterPlatform.value) {
+    // The previously selected platform no longer exists in the collection
+    filterPlatform.value = 'All';
+    activeFilters.platform = 'All';
+  }
 
   // Populate Modal Game Platform Selector
   const currentSelectVal = gamePlatformSelect.value;
   gamePlatformSelect.innerHTML = `
     <option value="" disabled selected>Select Platform</option>
-    ${combinedPlatforms.map(plat => `<option value="${plat}">${plat}</option>`).join('')}
+    ${optionsHTML}
     <option value="CUSTOM_ADD">+ Add Custom Platform</option>
   `;
   gamePlatformSelect.value = currentSelectVal; // Restore selected modal platform
@@ -968,8 +1037,8 @@ function renderFilterTags() {
     activeFiltersContainer.style.display = 'flex';
     filterTagsList.innerHTML = tags.map(tag => `
       <div class="filter-tag">
-        <span>${tag.label}</span>
-        <button data-filter-key="${tag.key}"><i data-lucide="x" style="width: 12px; height: 12px;"></i></button>
+        <span>${escapeHTML(tag.label)}</span>
+        <button type="button" data-filter-key="${tag.key}" aria-label="Remove filter ${escapeHTML(tag.label)}"><i data-lucide="x" style="width: 12px; height: 12px;"></i></button>
       </div>
     `).join('');
     if (window.lucide) window.lucide.createIcons();
@@ -978,10 +1047,33 @@ function renderFilterTags() {
   }
 }
 
+function clearAllFilters() {
+  activeFilters.search = '';
+  activeFilters.status = 'All';
+  activeFilters.platform = 'All';
+  activeFilters.format = 'All';
+
+  // Reset controls
+  searchInput.value = '';
+  searchClearBtn.style.display = 'none';
+  filterPlatform.value = 'All';
+  filterFormat.value = 'All';
+  clearStatusCardSelection();
+
+  renderLibrary();
+}
+
+function clearStatusCardSelection() {
+  document.querySelectorAll('.status-card').forEach(c => {
+    c.classList.remove('active-filter');
+    c.setAttribute('aria-pressed', 'false');
+  });
+}
+
 function removeFilterTag(key) {
   if (key === 'status') {
     activeFilters.status = 'All';
-    document.querySelectorAll('.status-card').forEach(c => c.classList.remove('active-filter'));
+    clearStatusCardSelection();
   } else if (key === 'platform') {
     activeFilters.platform = 'All';
     filterPlatform.value = 'All';
@@ -997,16 +1089,29 @@ function removeFilterTag(key) {
 // ----------------------------------------------------
 
 function setupEventListeners() {
-  
-  // Search Input query event (with instant rendering)
+
+  // A cover URL that 404s should reveal the procedural fallback underneath it.
+  // The page CSP forbids inline handlers, and `error` does not bubble, so this
+  // is registered once in the capture phase for every cover image on the page.
+  document.addEventListener('error', (e) => {
+    const img = e.target;
+    if (img instanceof HTMLImageElement && img.hasAttribute('data-cover-img')) {
+      img.remove();
+    }
+  }, true);
+
+
+  // Search input. Rendering rebuilds every card and recompiles the icon set, so
+  // it is debounced rather than run on every keystroke.
+  const runSearch = debounce(() => renderLibrary(), 180);
   searchInput.addEventListener('input', (e) => {
     activeFilters.search = e.target.value.trim();
-    if (activeFilters.search.length > 0) {
-      searchClearBtn.style.display = 'flex';
-    } else {
-      searchClearBtn.style.display = 'none';
+    searchClearBtn.style.display = activeFilters.search.length > 0 ? 'flex' : 'none';
+    // Searching from the analytics page is a request to see matching games
+    if (activeFilters.search && analysisSection.style.display === 'block') {
+      showLibraryView();
     }
-    renderLibrary();
+    runSearch();
   });
 
   // Search input clear button
@@ -1028,9 +1133,10 @@ function setupEventListeners() {
     renderLibrary();
   });
 
-  // Sorting
+  // Sorting (persisted alongside the view mode)
   sortBySelect.addEventListener('change', (e) => {
     sortBy = e.target.value;
+    localStorage.setItem('gamevault_sort_by', sortBy);
     renderLibrary();
   });
 
@@ -1047,20 +1153,24 @@ function setupEventListeners() {
     renderLibrary();
   });
 
-  // Status Cards Filter (Clicking dashboard cards)
+  // Status Cards Filter (dashboard cards act as toggle buttons)
   document.querySelectorAll('.status-card').forEach(card => {
     card.addEventListener('click', () => {
       const status = card.getAttribute('data-filter-status');
-      
+
       // If already active, toggle it off
-      if (activeFilters.status === status) {
+      const isActive = activeFilters.status === status;
+      document.querySelectorAll('.status-card').forEach(c => {
+        c.classList.remove('active-filter');
+        c.setAttribute('aria-pressed', 'false');
+      });
+
+      if (isActive) {
         activeFilters.status = 'All';
-        card.classList.remove('active-filter');
       } else {
-        // Clear active status on others
-        document.querySelectorAll('.status-card').forEach(c => c.classList.remove('active-filter'));
         activeFilters.status = status;
         card.classList.add('active-filter');
+        card.setAttribute('aria-pressed', 'true');
       }
 
       showLibraryView();
@@ -1069,18 +1179,7 @@ function setupEventListeners() {
   });
 
   // Clear all active filters button
-  clearAllFiltersBtn.addEventListener('click', () => {
-    activeFilters.status = 'All';
-    activeFilters.platform = 'All';
-    activeFilters.format = 'All';
-    
-    // Reset controls
-    filterPlatform.value = 'All';
-    filterFormat.value = 'All';
-    document.querySelectorAll('.status-card').forEach(c => c.classList.remove('active-filter'));
-    
-    renderLibrary();
-  });
+  clearAllFiltersBtn.addEventListener('click', clearAllFilters);
 
   // Event delegation for filter tag remove buttons
   filterTagsList.addEventListener('click', (e) => {
@@ -1103,8 +1202,16 @@ function setupEventListeners() {
   document.getElementById('add-game-btn').addEventListener('click', () => {
     openAddGameModal();
   });
+  // The empty-state button either adds a game or clears the filters that hid them
   emptyStateAddBtn.addEventListener('click', () => {
-    openAddGameModal();
+    const action = emptyStateAddBtn.dataset.action;
+    if (action === 'clear-filters') {
+      clearAllFilters();
+    } else if (action === 'retry') {
+      fetchGames();
+    } else {
+      openAddGameModal();
+    }
   });
 
   // Event delegation for dynamically rendered game cards and actions
@@ -1144,6 +1251,16 @@ function setupEventListeners() {
         openGameDetailsModal(gameId);
       }
     }
+  });
+
+  // Cards behave as buttons, so Enter/Space open the details view too
+  gamesGrid.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const gameCard = e.target.closest('.game-card');
+    if (!gameCard || e.target !== gameCard) return;
+    e.preventDefault();
+    const gameId = gameCard.getAttribute('data-id');
+    if (gameId) openGameDetailsModal(gameId);
   });
 
   // Modal Cancel triggers
@@ -1270,36 +1387,37 @@ function setupEventListeners() {
   document.getElementById('details-close-x').addEventListener('click', () => closeModal(detailsModal));
   document.getElementById('details-close-btn').addEventListener('click', () => closeModal(detailsModal));
 
-  // Delete Confirmation Modal close/confirm triggers
-  document.getElementById('delete-confirm-close-x').addEventListener('click', () => {
-    closeModal(deleteConfirmModal);
-    gameIdToDelete = null;
-  });
-  document.getElementById('delete-confirm-cancel-btn').addEventListener('click', () => {
-    closeModal(deleteConfirmModal);
-    gameIdToDelete = null;
-  });
-  document.getElementById('delete-confirm-ok-btn').addEventListener('click', () => {
-    confirmDeleteGame();
-  });
+  // Shared confirmation dialog triggers
+  document.getElementById('confirm-modal-close-x').addEventListener('click', () => resolveConfirmation(false));
+  document.getElementById('confirm-modal-cancel-btn').addEventListener('click', () => resolveConfirmation(false));
+  document.getElementById('confirm-modal-ok-btn').addEventListener('click', () => resolveConfirmation(true));
 
   // Close modals on clicking backdrop overlay
   document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
     backdrop.addEventListener('click', (e) => {
-      if (e.target === backdrop) {
+      if (e.target !== backdrop) return;
+      if (backdrop.id === 'confirm-modal') {
+        resolveConfirmation(false);
+      } else {
         closeModal(backdrop);
       }
     });
   });
 
-  // Close active modals on pressing Escape key
+  // Close active modals on pressing Escape, and keep Tab inside the dialog
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       const activeModal = document.querySelector('.modal-backdrop.show');
       if (activeModal) {
-        closeModal(activeModal);
+        if (activeModal.id === 'confirm-modal') {
+          resolveConfirmation(false);
+        } else {
+          closeModal(activeModal);
+        }
       }
+      return;
     }
+    trapFocus(e);
   });
 
   // Online Cover Art & Metadata Search handler
@@ -1342,7 +1460,7 @@ function setupEventListeners() {
               <i data-lucide="alert-circle" style="color: var(--color-abandoned); width: 18px; height: 18px;"></i>
               <div style="text-align: left; max-width: 280px;">
                 <p style="font-weight: 700; margin-bottom: 2px;">Feature Not Configured</p>
-                <p style="font-size: 11px; color: var(--text-muted); line-height: 1.3;">${err.error}</p>
+                <p style="font-size: 11px; color: var(--text-muted); line-height: 1.3;">${escapeHTML(err.error)}</p>
               </div>
             </div>
           `;
@@ -1365,17 +1483,22 @@ function setupEventListeners() {
           return;
         }
 
-        // Render search results
+        // Render search results. Everything here comes from a third-party API,
+        // so titles, genres and image URLs are all escaped/validated.
         coverSearchResults.innerHTML = results.map((game, index) => {
           const year = game.released ? new Date(game.released).getFullYear() : 'N/A';
+          const imgSrc = safeImageURL(game.coverUrl);
+          const thumb = imgSrc
+            ? `<img src="${imgSrc}" alt="" class="cover-search-item-img" loading="lazy" data-cover-img>`
+            : `<div class="cover-search-item-img is-placeholder" aria-hidden="true"></div>`;
           return `
-            <div class="cover-search-item" data-index="${index}">
-              <img src="${game.coverUrl || 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2250%22><rect width=%2240%22 height=%2250%22 fill=%22%23222%22/></svg>'}" class="cover-search-item-img" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2250%22><rect width=%2240%22 height=%2250%22 fill=%22%23222%22/></svg>'">
+            <button type="button" class="cover-search-item" data-index="${index}">
+              ${thumb}
               <div class="cover-search-item-info">
-                <span class="cover-search-item-title">${game.name}</span>
-                <span class="cover-search-item-meta">${year} • ${game.genres || 'Genres N/A'}</span>
+                <span class="cover-search-item-title">${escapeHTML(game.name)}</span>
+                <span class="cover-search-item-meta">${escapeHTML(year)} • ${escapeHTML(game.genres || 'Genres N/A')}</span>
               </div>
-            </div>
+            </button>
           `;
         }).join('');
 
@@ -1411,7 +1534,7 @@ function setupEventListeners() {
         coverSearchResults.innerHTML = `
           <div class="cover-search-error">
             <i data-lucide="alert-triangle" style="color: var(--color-backlog); width: 18px; height: 18px;"></i>
-            <span>Error: ${errMsg}</span>
+            <span>Error: ${escapeHTML(errMsg)}</span>
           </div>
         `;
         if (window.lucide) window.lucide.createIcons();
@@ -1436,23 +1559,36 @@ function setupEventListeners() {
 // UI NAVIGATION AND VIEW TABS
 // ----------------------------------------------------
 
+const libraryHeader = document.querySelector('.library-header');
+
 function showLibraryView() {
   navAll.classList.add('active');
+  navAll.setAttribute('aria-current', 'page');
   navStatsTrigger.classList.remove('active');
-  
+  navStatsTrigger.removeAttribute('aria-current');
+
   statsDashboard.style.display = 'grid';
   librarySection.style.display = 'block';
+  if (libraryHeader) libraryHeader.style.display = 'flex';
   analysisSection.style.display = 'none';
+
+  // The filter tag bar belongs to the library, not the analytics page
+  renderFilterTags();
 }
 
 function showAnalysisView() {
   navAll.classList.remove('active');
+  navAll.removeAttribute('aria-current');
   navStatsTrigger.classList.add('active');
-  
+  navStatsTrigger.setAttribute('aria-current', 'page');
+
   statsDashboard.style.display = 'none';
   librarySection.style.display = 'none';
+  // The search/sort controls only act on the library grid, so they go with it
+  if (libraryHeader) libraryHeader.style.display = 'none';
+  activeFiltersContainer.style.display = 'none';
   analysisSection.style.display = 'block';
-  
+
   // Re-fetch stats to draw analysis
   fetchStats();
 }
@@ -1460,31 +1596,113 @@ function showAnalysisView() {
 function updateViewModeButtons() {
   localStorage.setItem('gamevault_view_mode', viewMode);
   
-  if (viewMode === 'list') {
-    viewGridBtn.classList.remove('active');
-    viewListBtn.classList.add('active');
-    document.body.classList.add('list-view-active');
-  } else {
-    viewGridBtn.classList.add('active');
-    viewListBtn.classList.remove('active');
-    document.body.classList.remove('list-view-active');
-  }
+  const isList = viewMode === 'list';
+  viewGridBtn.classList.toggle('active', !isList);
+  viewListBtn.classList.toggle('active', isList);
+  viewGridBtn.setAttribute('aria-pressed', String(!isList));
+  viewListBtn.setAttribute('aria-pressed', String(isList));
+  document.body.classList.toggle('list-view-active', isList);
 }
 
 // ----------------------------------------------------
 // MODAL FORMS HANDLERS
 // ----------------------------------------------------
 
+const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+// Modals stack (details → delete confirmation), so remember which element to
+// hand focus back to for each one.
+const modalReturnFocus = new WeakMap();
+
 function openModal(modalEl) {
+  modalReturnFocus.set(modalEl, document.activeElement);
   modalEl.style.display = 'flex';
-  setTimeout(() => modalEl.classList.add('show'), 10);
+  modalEl.removeAttribute('aria-hidden');
+  document.body.classList.add('modal-open');
+  setTimeout(() => {
+    modalEl.classList.add('show');
+    // Prefer the field the dialog is actually about over its close button
+    const target = modalEl.querySelector('[data-autofocus]') || modalEl.querySelector(FOCUSABLE_SELECTOR);
+    if (target) target.focus();
+  }, 10);
 }
 
 function closeModal(modalEl) {
   modalEl.classList.remove('show');
+  modalEl.setAttribute('aria-hidden', 'true');
   setTimeout(() => {
     modalEl.style.display = 'none';
+    if (!document.querySelector('.modal-backdrop.show')) {
+      document.body.classList.remove('modal-open');
+    }
   }, 250);
+
+  const returnTo = modalReturnFocus.get(modalEl);
+  modalReturnFocus.delete(modalEl);
+  if (returnTo && document.contains(returnTo)) {
+    returnTo.focus();
+  }
+}
+
+// Keeps Tab inside the topmost dialog
+function trapFocus(e) {
+  if (e.key !== 'Tab') return;
+  const modalEl = document.querySelector('.modal-backdrop.show');
+  if (!modalEl) return;
+
+  const focusable = Array.from(modalEl.querySelectorAll(FOCUSABLE_SELECTOR))
+    .filter(el => el.offsetParent !== null || el === document.activeElement);
+  if (focusable.length === 0) return;
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+// Promise-based confirmation dialog, styled like the rest of the app instead of
+// falling back to window.confirm().
+let pendingConfirm = null;
+
+function askConfirmation({ title, message, confirmLabel = 'Confirm', danger = true }) {
+  // Never strand an earlier promise if a second confirmation is somehow raised
+  if (pendingConfirm) {
+    const stale = pendingConfirm;
+    pendingConfirm = null;
+    stale(false);
+  }
+
+  const modal = document.getElementById('confirm-modal');
+  document.getElementById('confirm-modal-title').textContent = title;
+  document.getElementById('confirm-modal-message').innerHTML = message;
+
+  const okBtn = document.getElementById('confirm-modal-ok-btn');
+  okBtn.textContent = confirmLabel;
+  okBtn.className = danger ? 'btn btn-danger' : 'btn btn-primary';
+
+  openModal(modal);
+
+  return new Promise(resolve => {
+    pendingConfirm = resolve;
+  });
+}
+
+function resolveConfirmation(result) {
+  const modal = document.getElementById('confirm-modal');
+  if (modal.classList.contains('show') || modal.style.display === 'flex') {
+    closeModal(modal);
+  }
+  if (pendingConfirm) {
+    const resolve = pendingConfirm;
+    pendingConfirm = null;
+    resolve(result);
+  }
 }
 
 function openAddGameModal() {
@@ -1493,6 +1711,8 @@ function openAddGameModal() {
   gameIdInput.value = '';
   customPlatformInput.style.display = 'none';
   customPlatformInput.removeAttribute('required');
+  customPlatformInput.value = '';
+  gamePlatformSelect.value = '';
   document.getElementById('cover-search-results').style.display = 'none';
   setFormRatingStars(0);
   openModal(gameModal);
@@ -1513,6 +1733,7 @@ function openEditGameModal(id) {
     gamePlatformSelect.value = game.platform;
     customPlatformInput.style.display = 'none';
     customPlatformInput.removeAttribute('required');
+    customPlatformInput.value = ''; // don't leave a stale name behind the select
   } else {
     gamePlatformSelect.value = 'CUSTOM_ADD';
     customPlatformInput.value = game.platform;
@@ -1538,11 +1759,10 @@ function openEditGameModal(id) {
 function setFormRatingStars(ratingVal) {
   gameRatingInput.value = ratingVal;
   starsContainer.querySelectorAll('[data-value]').forEach((star, index) => {
-    if (index < ratingVal) {
-      star.classList.add('filled');
-    } else {
-      star.classList.remove('filled');
-    }
+    const filled = index < ratingVal;
+    star.classList.toggle('filled', filled);
+    // The group is a radiogroup: exactly the chosen value reads as checked
+    star.setAttribute('aria-checked', String(index + 1 === ratingVal));
   });
 }
 
@@ -1591,9 +1811,13 @@ function resetImportZone() {
 
 async function submitImportData() {
   if (!importedFileContent) return;
-  if (!confirm(`Are you absolutely sure? This will OVERWRITE your current database. You will lose any additions or playtime changes not backed up.`)) {
-    return;
-  }
+
+  const confirmed = await askConfirmation({
+    title: 'Overwrite library',
+    message: `This will <strong>replace all ${games.length} games</strong> in your library with the ${importedFileContent.length} games in this backup. Anything not in the backup — including recent playtime — will be lost.`,
+    confirmLabel: 'Overwrite Library'
+  });
+  if (!confirmed) return;
 
   // Discard active timer if running before import
   if (activeSession) {
@@ -1639,9 +1863,10 @@ function showToast(message, type = 'info') {
   if (type === 'success') iconName = 'check-circle';
   if (type === 'error') iconName = 'alert-triangle';
 
+  // Toast text routinely carries game titles and server error strings — escape it
   toast.innerHTML = `
     <i data-lucide="${iconName}"></i>
-    <span>${message}</span>
+    <span>${escapeHTML(message)}</span>
   `;
 
   container.appendChild(toast);
@@ -1694,37 +1919,20 @@ function openGameDetailsModal(id) {
   detailsRelease.textContent = game.releaseYear || 'N/A';
   detailsGenre.textContent = game.genre || 'N/A';
   detailsRating.innerHTML = generateStarsHTML(game.rating || 0);
+  detailsRating.setAttribute('role', 'img');
+  detailsRating.setAttribute('aria-label', game.rating ? `Rated ${game.rating} out of 5` : 'Not rated yet');
   detailsNotes.textContent = game.notes || 'No review notes written yet.';
 
-  // Image or fallback gradient
-  if (game.coverUrl) {
-    detailsCoverContainer.innerHTML = `
-      <img src="${escapeHTML(game.coverUrl)}" alt="${escapeHTML(game.title)} cover" class="details-cover-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-    `;
-  } else {
-    detailsCoverContainer.innerHTML = '';
-  }
-
-  // Create fallback cover element
-  const fallbackHTML = document.createElement('div');
-  fallbackHTML.className = 'details-cover-fallback';
-  fallbackHTML.id = `details-fallback-${game.id}`;
-  fallbackHTML.innerHTML = `
-    <i data-lucide="gamepad-2" style="width: 32px; height: 32px; opacity: 0.8; margin-bottom: 8px;"></i>
-    <span style="font-weight: 700; font-size: 13px; line-height: 1.3;">${escapeHTML(game.title)}</span>
+  // Procedural fallback sits behind the cover, so a broken URL degrades cleanly
+  const gradient = coverGradient(game.title);
+  const coverSrc = safeImageURL(game.coverUrl);
+  detailsCoverContainer.innerHTML = `
+    ${coverSrc ? `<img src="${coverSrc}" alt="" class="details-cover-img" data-cover-img>` : ''}
+    <div class="details-cover-fallback" style="background: ${gradient.background};">
+      <i data-lucide="gamepad-2" style="width: 32px; height: 32px; opacity: 0.8; color: ${gradient.accent};"></i>
+      <span style="font-weight: 700; font-size: 13px; line-height: 1.3;">${escapeHTML(game.title)}</span>
+    </div>
   `;
-  detailsCoverContainer.appendChild(fallbackHTML);
-
-  // Apply fallback gradient
-  if (!game.coverUrl) {
-    let hash = 0;
-    for (let i = 0; i < game.title.length; i++) {
-      hash = game.title.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const h1 = Math.abs(hash % 360);
-    const h2 = (h1 + 60) % 360;
-    fallbackHTML.style.background = `linear-gradient(135deg, hsl(${h1}, 45%, 15%) 0%, hsl(${h2}, 45%, 8%) 100%)`;
-  }
 
   // Bind Track Session button
   const trackBtn = document.getElementById('details-track-btn');
