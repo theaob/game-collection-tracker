@@ -1,6 +1,6 @@
 {
   "name": "game-collection-tracker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A self-hosted game collection tracker for multiple platforms and physical/digital copies.",
   "type": "module",
   "main": "server.js",
